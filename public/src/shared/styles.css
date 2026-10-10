@@ -9,6 +9,7 @@ h1{font-size:1.4rem;margin:.2rem 0 1rem} h2{font-size:1.05rem;margin:0} p{margin
 .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .center-screen{min-height:100%;display:flex;align-items:center;justify-content:center;padding:1rem}
 .auth-card{width:100%;max-width:420px}
+.auth-card .stack>a,.auth-card .stack>p.muted:last-child{align-self:center;text-align:center}
 .shell{min-height:100%;display:flex;flex-direction:column} .topbar{background:var(--navy);color:#fff;padding:.7rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;position:sticky;top:0;z-index:5}
 .brand{font-weight:700;letter-spacing:.2px} .topbar .who{font-size:.85rem;opacity:.85}
 .nav{display:flex;gap:.25rem;overflow-x:auto;background:var(--navy-2);padding:.35rem .6rem} .nav a{color:#cfdcec;text-decoration:none;padding:.45rem .8rem;border-radius:8px;white-space:nowrap;font-size:.92rem} .nav a.active{background:#fff;color:var(--navy);font-weight:600}
