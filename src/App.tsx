@@ -16,7 +16,6 @@ function Shell() {
   if (user?.mustChangePassword) return <ForcePasswordChange />;
   return (
     <div className="app-mobile">
-      <header className="app-header"><strong>Smart Attendance · Lecturer</strong></header>
       <main className="content"><Outlet /></main>
       <nav className="tabbar" aria-label="Main"><div className="tabbar-inner">
         {TABS.map(([to, l, i]) => <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => (isActive ? "active" : "")}><span className="ico" aria-hidden>{i}</span>{l}</NavLink>)}
