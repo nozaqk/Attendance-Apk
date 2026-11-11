@@ -18,8 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -123,19 +127,29 @@ fun StudentShell(
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = CardWhite) {
-                listOf(
-                    Triple("home", "🏠", "Home"),
-                    Triple("class", "📡", "Class"),
-                    Triple("course", "📚", "Course"),
-                    Triple("setting", "⚙️", "Setting")
-                ).forEach { (route, icon, label) ->
-                    NavigationBarItem(
-                        selected = tab == route && !showNotifs,
-                        onClick = { tab = route; showNotifs = false },
-                        icon = { Text(icon, fontSize = 20.sp) },
-                        label = { Text(label, fontSize = 11.sp) }
-                    )
+            Column {
+                HorizontalDivider(thickness = 1.dp, color = Line)
+                NavigationBar(containerColor = CardWhite, tonalElevation = 0.dp) {
+                    listOf(
+                        Triple("home", "🏠", "Home"),
+                        Triple("class", "📡", "Class"),
+                        Triple("course", "📚", "Course"),
+                        Triple("setting", "⚙️", "Setting")
+                    ).forEach { (route, icon, label) ->
+                        NavigationBarItem(
+                            selected = tab == route && !showNotifs,
+                            onClick = { tab = route; showNotifs = false },
+                            icon = { Text(icon, fontSize = 20.sp) },
+                            label = { Text(label, fontSize = 11.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Navy,
+                                selectedTextColor = Navy,
+                                unselectedIconColor = Muted,
+                                unselectedTextColor = Muted,
+                                indicatorColor = Color.Transparent
+                            )
+                        )
+                    }
                 }
             }
         }

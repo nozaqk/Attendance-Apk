@@ -27,6 +27,11 @@ private val Scheme = lightColorScheme(
     primary = Navy,
     onPrimary = Color.White,
     secondary = Navy2,
+    onSecondary = Color.White,
+    // Web look: white fields with a --line border, navy focus ring (primary).
+    outline = Line,
+    outlineVariant = Line,
+    surfaceVariant = CardWhite,
     background = AppBg,
     surface = CardWhite,
     onBackground = TextDark,
