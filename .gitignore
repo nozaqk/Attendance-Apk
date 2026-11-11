@@ -1,0 +1,22 @@
+# Web
+node_modules/
+dist/
+student-frontend/node_modules/
+student-frontend/dist/
+
+# Android (Gradle outputs and local SDK path)
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Copied web builds inside Android assets (built by CI / scripts/build-apk.sh)
+android-lecturer/app/src/main/assets/*
+!android-lecturer/app/src/main/assets/.gitkeep
+android-student/app/src/main/assets/*
+!android-student/app/src/main/assets/.gitkeep
+
+# Local APKs (download from GitHub Actions instead of committing binaries)
+*.apk

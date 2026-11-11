@@ -1,0 +1,103 @@
+name: Build APKs
+
+# Builds installable debug APKs for both portals from the exact web sources
+# in this repo (lecturer at the root, student in student-frontend/).
+# Run manually from the Actions tab, or automatically on pushes to main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  lecturer:
+    name: Lecturer APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Build lecturer web app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy web build into Android assets
+        run: |
+          mkdir -p android-lecturer/app/src/main/assets
+          cp -r dist/* android-lecturer/app/src/main/assets/
+          ls android-lecturer/app/src/main/assets/
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Build lecturer APK
+        working-directory: android-lecturer
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload lecturer APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lecturer-apk
+          path: android-lecturer/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  student:
+    name: Student APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: student-frontend/package-lock.json
+
+      - name: Build student web app
+        working-directory: student-frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy web build into Android assets
+        run: |
+          mkdir -p android-student/app/src/main/assets
+          cp -r student-frontend/dist/* android-student/app/src/main/assets/
+          ls android-student/app/src/main/assets/
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build student APK
+        working-directory: android-student
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload student APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-apk
+          path: android-student/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
