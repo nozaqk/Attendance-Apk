@@ -2,11 +2,12 @@ name: Build APKs
 
 # Builds installable debug APKs for both portals from the exact web sources
 # in this repo (lecturer at the root, student in student-frontend/).
-# Run manually from the Actions tab, or automatically on pushes to main.
+# Runs on pull requests, on pushes to main, or manually from the Actions tab.
 on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
   lecturer:
