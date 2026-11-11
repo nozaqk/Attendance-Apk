@@ -1,10 +1,11 @@
-package com.smartattendance.app
+package com.smartattendance.app.data
 
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.smartattendance.app.R
 
 /**
  * Shared notification helpers used by both the JS bridge and the background
