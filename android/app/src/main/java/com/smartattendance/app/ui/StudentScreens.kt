@@ -609,7 +609,7 @@ private fun ProfileForm(
                 OutlinedTextField(dept?.name ?: "Select department…", {}, label = { Text("Department") }, readOnly = true, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = {
                     androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(deptExpanded)
                 })
-                androidx.compose.material3.ExposedDropdownMenu(deptExpanded, { deptExpanded = false }) {
+                ExposedDropdownMenu(deptExpanded, { deptExpanded = false }) {
                     depts.forEach {
                         androidx.compose.material3.DropdownMenuItem(text = { Text(it.name) }, onClick = { departmentId = it.id; deptExpanded = false })
                     }
@@ -621,7 +621,7 @@ private fun ProfileForm(
                 OutlinedTextField(if (semester.isEmpty()) "Select semester…" else "Semester $semester", {}, label = { Text("Semester") }, readOnly = true, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = {
                     androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(semExpanded)
                 })
-                androidx.compose.material3.ExposedDropdownMenu(semExpanded, { semExpanded = false }) {
+                ExposedDropdownMenu(semExpanded, { semExpanded = false }) {
                     for (i in 1..count) {
                         androidx.compose.material3.DropdownMenuItem(text = { Text("Semester $i") }, onClick = { semester = i.toString(); semExpanded = false })
                     }
@@ -632,7 +632,7 @@ private fun ProfileForm(
                 OutlinedTextField(streamLabel(stream), {}, label = { Text("Stream") }, readOnly = true, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = {
                     androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(streamExpanded)
                 })
-                androidx.compose.material3.ExposedDropdownMenu(streamExpanded, { streamExpanded = false }) {
+                ExposedDropdownMenu(streamExpanded, { streamExpanded = false }) {
                     listOf("REGULAR" to "Regular", "WEEKLY" to "Weekly", "EVENING" to "Evening").forEach { (k, v) ->
                         androidx.compose.material3.DropdownMenuItem(text = { Text(v) }, onClick = { stream = k; streamExpanded = false })
                     }

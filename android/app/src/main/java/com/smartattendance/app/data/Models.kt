@@ -229,12 +229,13 @@ data class StudentSession(
         fun fromJson(o: JSONObject): StudentSession {
             val room = o.optJSONObject("classroom")
             val att = o.optJSONObject("attendance")
+            val lecturer = o.optJSONObject("lecturer")
             return StudentSession(
                 o.optString("id"), o.optString("courseCode"), o.optString("courseName"),
                 o.optString("status"),
                 room?.optString("name") ?: "",
                 room?.optString("building")?.takeIf { room != null && !room.isNull("building") },
-                o.optJSONObject("lecturer")?.optString("name")?.takeIf { !o.optJSONObject("lecturer").isNull("name") },
+                lecturer?.optString("name")?.takeIf { it.isNotEmpty() },
                 o.optString("startedAt").takeIf { !o.isNull("startedAt") },
                 o.optString("openedAt"), o.optString("endedAt").takeIf { !o.isNull("endedAt") },
                 o.optString("sessionDate"),

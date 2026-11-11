@@ -363,7 +363,7 @@ private fun CourseDropdown(courses: List<Course>, selected: String, onSelect: (S
         OutlinedTextField(label, {}, readOnly = true, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = {
             androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(expanded)
         })
-        androidx.compose.material3.ExposedDropdownMenu(expanded, { expanded = false }) {
+        ExposedDropdownMenu(expanded, { expanded = false }) {
             androidx.compose.material3.DropdownMenuItem(text = { Text("All my courses") }, onClick = { onSelect(""); expanded = false })
             courses.forEach {
                 androidx.compose.material3.DropdownMenuItem(text = { Text("${it.code} · ${it.name}") }, onClick = { onSelect(it.id); expanded = false })

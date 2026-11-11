@@ -210,7 +210,7 @@ class MainActivity : ComponentActivity() {
                 store.setToken(null)
                 user = null
                 try {
-                    stopService(Intent(this, NotificationService::class.java))
+                    stopService(Intent(this@MainActivity, NotificationService::class.java))
                 } catch (_: Exception) {}
             }
         }

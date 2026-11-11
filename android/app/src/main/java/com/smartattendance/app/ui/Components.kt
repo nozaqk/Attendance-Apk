@@ -93,10 +93,10 @@ fun AppCard(title: String? = null, actions: @Composable (() -> Unit)? = null, co
 @Composable
 fun PrimaryButton(
     label: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     enabled: Boolean = true,
-    busy: Boolean = false
+    busy: Boolean = false,
+    onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
@@ -112,10 +112,10 @@ fun PrimaryButton(
 @Composable
 fun SecondaryButton(
     label: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     enabled: Boolean = true,
-    busy: Boolean = false
+    busy: Boolean = false,
+    onClick: () -> Unit
 ) {
     OutlinedButton(
         onClick = onClick,
@@ -131,10 +131,10 @@ fun SecondaryButton(
 @Composable
 fun DangerButton(
     label: String,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
     enabled: Boolean = true,
-    busy: Boolean = false
+    busy: Boolean = false,
+    onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
