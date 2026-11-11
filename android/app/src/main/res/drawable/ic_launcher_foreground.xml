@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Green check from the web favicon (public/favicon.svg), centred in the
+     108dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#4ade80"
+        android:pathData="M34,60 L48,74 L74,42 L66,34 L48,56 L42,50 Z" />
+</vector>

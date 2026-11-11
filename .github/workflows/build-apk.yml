@@ -1,0 +1,67 @@
+name: Build APK
+
+# Builds the single installable debug APK (Lecturer + Student in one app)
+# from the exact web sources in this repo (lecturer at the root, student in
+# student-frontend/). Runs on pull requests, on pushes to main, or manually
+# from the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Build unified APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Build lecturer web app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build student web app
+        working-directory: student-frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy web builds into Android assets
+        run: |
+          mkdir -p android/app/src/main/assets/lecturer android/app/src/main/assets/student
+          cp -r dist/* android/app/src/main/assets/lecturer/
+          cp -r student-frontend/dist/* android/app/src/main/assets/student/
+          ls android/app/src/main/assets/lecturer/
+          ls android/app/src/main/assets/student/
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-attendance-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
