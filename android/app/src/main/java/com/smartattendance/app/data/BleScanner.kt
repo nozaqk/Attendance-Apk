@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -56,8 +55,13 @@ class BleScanner(
     private var scanning = false
     private var sessionId: String? = null
     private var minGapMs: Long = 20_000
-    private var lastSent = 0L
-    private var postJob: Job? = null
+
+    /**
+     * Send at most one observation per node per [minGapMs]. Throttling per node
+     * (not globally) matters in a room full of phones and earbuds: one other
+     * device must never delay the report of the classroom node.
+     */
+    private val lastSentByNode = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val callback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -71,23 +75,26 @@ class BleScanner(
             }
             val now = System.currentTimeMillis()
             _last.value = BleSighting(nodeId, result.rssi, now)
-            if (now - lastSent < minGapMs) return
-            lastSent = now
-            postJob?.cancel()
-            postJob = scope.launch {
+            val last = lastSentByNode[nodeId] ?: 0L
+            if (now - last < minGapMs) return
+            lastSentByNode[nodeId] = now
+            val rssi = result.rssi
+            val currentSession = sessionId
+            scope.launch {
                 try {
                     val body = JSONObject()
                         .put("nodeId", nodeId)
-                        .put("rssi", result.rssi)
+                        .put("rssi", rssi)
                         .put("timestamp", now)
-                    sessionId?.let { body.put("sessionId", it) }
+                    currentSession?.let { body.put("sessionId", it) }
                     val res = api.post("/api/attendance/ble-observation", body)
                     _result.value = VerifyResult.fromJson(res)
                     _error.value = null
                 } catch (e: ApiException) {
                     _error.value = e.message
                     _result.value = null
-                    lastSent = now - minGapMs + 5_000
+                    // Back off briefly, then allow the next attempt.
+                    lastSentByNode[nodeId] = now - minGapMs + 5_000
                 }
             }
         }
@@ -99,6 +106,13 @@ class BleScanner(
     }
 
     fun start(sessionId: String?, minGapMs: Long) {
+        // A different class (or a fresh panel) starts with a clean verdict so a
+        // previous session's "verified" never leaks into the new one.
+        if (this.sessionId != sessionId) {
+            _result.value = null
+            _error.value = null
+            lastSentByNode.clear()
+        }
         this.sessionId = sessionId
         this.minGapMs = minGapMs
         val adapter = adapter
