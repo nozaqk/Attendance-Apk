@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- BLE is used when present, but the app still runs without it -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
     <!-- Bluetooth LE scanning for classroom ESP32 nodes.
          Android 12+ (API 31+): BLUETOOTH_SCAN (neverForLocation) + BLUETOOTH_CONNECT.
          Older: ACCESS_FINE_LOCATION is required at runtime for BLE scans. -->
@@ -51,7 +54,7 @@
         </activity>
 
         <service
-            android:name=".NotificationService"
+            android:name=".data.NotificationService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

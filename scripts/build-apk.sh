@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# Builds the single Smart Attendance APK (Lecturer + Student in one app).
-# Prerequisites: Node.js 20+, JDK 17, Android SDK (platform 34 + build-tools 34.0.0).
+# Builds the single Smart Attendance APK: one native app (Kotlin + Jetpack
+# Compose) with the Lecturer portal and the Student portal inside it.
+# No Node.js, no web build, no WebView.
+#
+# Prerequisites:
+#   * JDK 17
+#   * Android SDK with platform 34 + build-tools 34.0.0 (ANDROID_HOME / ANDROID_SDK_ROOT)
 # Usage: ./scripts/build-apk.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "==> Building lecturer web app"
-(cd "$ROOT" && npm ci && npm run build)
+if [[ -z "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" ]]; then
+  echo "Set ANDROID_HOME (or ANDROID_SDK_ROOT) to your Android SDK path." >&2
+  exit 1
+fi
 
-echo "==> Building student web app"
-(cd "$ROOT/student-frontend" && npm ci && npm run build)
+echo "==> Building native APK"
+cd "$ROOT/android"
+chmod +x gradlew
+./gradlew assembleDebug
 
-echo "==> Copying web builds into Android assets"
-mkdir -p "$ROOT/android/app/src/main/assets/lecturer" "$ROOT/android/app/src/main/assets/student"
-cp -r "$ROOT/dist/"* "$ROOT/android/app/src/main/assets/lecturer/"
-cp -r "$ROOT/student-frontend/dist/"* "$ROOT/android/app/src/main/assets/student/"
-
-echo "==> Building APK"
-(cd "$ROOT/android" && ./gradlew assembleDebug)
-
+echo
 echo "APK: $ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
+echo "Install with: adb install -r $ROOT/android/app/build/outputs/apk/debug/app-debug.apk"

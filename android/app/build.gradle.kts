@@ -24,7 +24,6 @@ android {
             )
         }
         debug {
-            // Allow Chrome DevTools remote debugging of the WebView in debug builds only.
             isDebuggable = true
         }
     }
@@ -36,10 +35,19 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
+    }
 }
 
 dependencies {
-    // No AndroidX / third-party dependencies: the shell uses only the Android
-    // framework (WebView, BluetoothLeScanner, NotificationManager, MediaStore).
-    // This keeps the APK small and the build reproducible.
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    implementation(composeBom)
+    implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

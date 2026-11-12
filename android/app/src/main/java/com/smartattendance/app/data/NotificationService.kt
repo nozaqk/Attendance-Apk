@@ -1,4 +1,4 @@
-package com.smartattendance.app
+package com.smartattendance.app.data
 
 import android.app.Service
 import android.content.Context
@@ -18,8 +18,8 @@ import java.net.URL
  * and shows a local notification for every new unread item. Seen ids are kept
  * in SharedPreferences so restarting the service does not re-notify.
  *
- * The service is started by [NotifyBridge.setSession] and stopped by
- * [NotifyBridge.clearSession] (sign-out). It never uses the user's login
+ * The service is started on student sign-in and stopped on sign-out.
+ * It never uses the user's login
  * token — only the restricted device token.
  */
 class NotificationService : Service() {
@@ -53,9 +53,9 @@ class NotificationService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun pollOnce() {
-        val prefs = getSharedPreferences(NotifyBridge.PREFS, Context.MODE_PRIVATE)
-        val apiBase = prefs.getString(NotifyBridge.KEY_API_BASE, null)?.trimEnd('/')
-        val token = prefs.getString(NotifyBridge.KEY_DEVICE_TOKEN, null)
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val apiBase = prefs.getString(KEY_API_BASE, null)?.trimEnd('/')
+        val token = prefs.getString(KEY_DEVICE_TOKEN, null)
         if (apiBase.isNullOrEmpty() || token.isNullOrEmpty()) {
             stopSelf()
             return
@@ -85,7 +85,7 @@ class NotificationService : Service() {
                 }
                 if (changed) {
                     // Cap stored ids so preferences do not grow forever.
-                    val trimmed = seen.takeLast(MAX_SEEN).toSet()
+                    val trimmed = seen.toList().takeLast(MAX_SEEN).toSet()
                     prefs.edit().putStringSet(KEY_SEEN, trimmed).apply()
                 }
             } catch (_: Exception) {
@@ -114,6 +114,9 @@ class NotificationService : Service() {
         const val POLL_INTERVAL_MS = 30_000L
         const val MAX_SEEN = 200
         const val KEY_SEEN = "seen_ids"
+        const val PREFS = "bg_session"
+        const val KEY_API_BASE = "api_base"
+        const val KEY_DEVICE_TOKEN = "device_token"
 
         @Volatile var isRunning: Boolean = false
     }

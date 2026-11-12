@@ -1,9 +1,8 @@
 name: Build APK
 
-# Builds the single installable debug APK (Lecturer + Student in one app)
-# from the exact web sources in this repo (lecturer at the root, student in
-# student-frontend/). Runs on pull requests, on pushes to main, or manually
-# from the Actions tab.
+# Builds the single native Android app (Kotlin + Jetpack Compose) that contains
+# both portals — Lecturer and Student — in one APK. There is no WebView and no
+# web build step: the app talks to the backend directly.
 on:
   workflow_dispatch:
   push:
@@ -12,7 +11,7 @@ on:
 
 jobs:
   build:
-    name: Build unified APK
+    name: Build native APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,30 +23,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Build lecturer web app
-        run: |
-          npm ci
-          npm run build
-
-      - name: Build student web app
-        working-directory: student-frontend
-        run: |
-          npm ci
-          npm run build
-
-      - name: Copy web builds into Android assets
-        run: |
-          mkdir -p android/app/src/main/assets/lecturer android/app/src/main/assets/student
-          cp -r dist/* android/app/src/main/assets/lecturer/
-          cp -r student-frontend/dist/* android/app/src/main/assets/student/
-          ls android/app/src/main/assets/lecturer/
-          ls android/app/src/main/assets/student/
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -55,9 +32,31 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
-      - name: Build APK
+      - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
+
+      # The run log download host is not always reachable for tooling, so on
+      # failure the compiler output is also posted on the pull request, which
+      # keeps the exact Kotlin/Gradle errors readable.
+      - name: Report build errors on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LOG=android/build.log
+          [ -f "$LOG" ] || exit 0
+          {
+            echo '### Build failed'
+            echo '```'
+            grep -E "e: file://|^e: |error:|What went wrong|FAILURE:|Execution failed|Could not resolve|Caused by" -m 200 "$LOG" || tail -n 120 "$LOG"
+            echo '```'
+          } > /tmp/report.md
+          head -c 60000 /tmp/report.md > /tmp/report.trim.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/report.trim.md || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

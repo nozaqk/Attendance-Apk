@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Navy primary button matching the web app's .btn-primary (#12263f). -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/navy" />
-    <corners android:radius="12dp" />
-</shape>
