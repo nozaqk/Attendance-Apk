@@ -1,5 +1,6 @@
 package com.smartattendance.app.data
 
+import com.smartattendance.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -83,6 +84,12 @@ class ApiClient(
         }
 
     companion object {
-        const val BASE = "https://attendance-system-33pl.onrender.com"
+        /**
+         * Backend base URL, injected at build time from the `API_BASE_URL`
+         * Gradle property / environment variable (see app/build.gradle.kts).
+         * Defaults to the Render host; point it at the Cloudflare domain to
+         * route all traffic through the custom domain.
+         */
+        val BASE: String = BuildConfig.API_BASE_URL.trimEnd('/')
     }
 }

@@ -34,7 +34,12 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
+        env:
+          # Repo variable: Settings → Secrets and variables → Actions → Variables
+          # API_BASE_URL = https://yourdomain.com  (public value, not a secret)
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://attendance-system-33pl.onrender.com' }}
         run: |
+          echo "Building APK against API_BASE_URL=$API_BASE_URL"
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}

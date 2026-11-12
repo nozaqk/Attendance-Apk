@@ -57,6 +57,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         com.smartattendance.app.data.NotifyHelper.ensureChannels(this)
 
+        if (ApiClient.BASE.contains("yourdomain.com")) {
+            android.util.Log.e(
+                "SmartAttendance",
+                "API_BASE_URL still points at the placeholder domain (${ApiClient.BASE}). " +
+                    "Rebuild with -PAPI_BASE_URL=https://<your-real-domain>."
+            )
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
