@@ -25,8 +25,12 @@ create an account — and each portal then operates separately:
 - App name: **Smart Attendance**
 - Package ID: `com.smartattendance.app`
 - Minimum Android: 8.0 (API 26); target/compile SDK 34
-- Backend: `https://attendance-system-33pl.onrender.com` (baked into
-  `data/Api.kt`, matching the web `.env.production`)
+- Backend: configured at build time, not hardcoded. `data/Api.kt` reads
+  `BuildConfig.API_BASE_URL`, generated from the `API_BASE_URL` Gradle property /
+  environment variable (CI uses the repository variable of the same name).
+  Default when unset: `https://attendance-system-33pl.onrender.com`.
+  Point it at the Cloudflare domain: `API_BASE_URL=https://yourdomain.com ./scripts/build-apk.sh`.
+  See `docs/DOMAIN_AND_API_SECURITY.md`.
 
 ## What is native now
 

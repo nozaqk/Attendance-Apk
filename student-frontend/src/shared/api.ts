@@ -1,5 +1,29 @@
 // Shared API client (copied into each frontend by scripts/sync-frontend-shared.sh — edit it there).
-const BASE = ((import.meta as any).env?.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+/**
+ * API base URL — configured at build time, never hardcoded in components.
+ *
+ * Set `VITE_API_URL` (preferred) in `.env.production` / `.env.local`, e.g.
+ *   VITE_API_URL=https://yourdomain.com
+ * The legacy name `VITE_API_BASE_URL` is still honoured so existing deploys
+ * keep working. Trailing slashes are stripped; an empty value means "same
+ * origin" (useful when a dev server proxies /api).
+ *
+ * This value is public by definition (it ships in the JS bundle) — never put
+ * secrets in VITE_* variables.
+ */
+const env = (import.meta as any).env ?? {};
+const RAW_BASE: unknown = env.VITE_API_URL ?? env.VITE_API_BASE_URL ?? "";
+export const API_BASE_URL: string = String(RAW_BASE).trim().replace(/\/+$/, "");
+
+if (API_BASE_URL.includes("yourdomain.com")) {
+  // Fail loudly in the console instead of silently calling a placeholder host.
+  console.error(
+    "[config] VITE_API_URL still points at the placeholder domain https://yourdomain.com — set your real API domain before deploying.",
+  );
+}
+
+const BASE = API_BASE_URL;
 const TOKEN_KEY = "attendance.token";
 
 export function getToken(): string | null {
@@ -17,7 +41,7 @@ let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: (() => void) | null) { onUnauthorized = fn; }
 
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
-  if (!BASE) throw new ApiError(0, "NO_API", "VITE_API_BASE_URL is not configured for this build");
+  if (!BASE) throw new ApiError(0, "NO_API", "VITE_API_URL is not configured for this build");
   let res: Response;
   try {
     res = await fetch(BASE + path, {

@@ -1,4 +1,6 @@
 # Web
+.env.local
+.env.*.local
 node_modules/
 dist/
 student-frontend/node_modules/

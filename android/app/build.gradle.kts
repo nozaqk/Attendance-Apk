@@ -3,6 +3,16 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// API base URL (public, ships in the APK — never a secret here).
+// Override with: ./gradlew assembleDebug -PAPI_BASE_URL=https://yourdomain.com
+// or the API_BASE_URL environment variable (used by CI and scripts/build-apk.sh).
+val defaultApiBaseUrl = "https://attendance-system-33pl.onrender.com"
+val apiBaseUrl: String = (
+    (findProperty("API_BASE_URL") as String?)
+        ?: System.getenv("API_BASE_URL")
+        ?: defaultApiBaseUrl
+    ).trim().trimEnd('/')
+
 android {
     namespace = "com.smartattendance.app"
     compileSdk = 34
@@ -13,6 +23,9 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        // Single source of truth for the backend host in the native app.
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {
@@ -37,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
