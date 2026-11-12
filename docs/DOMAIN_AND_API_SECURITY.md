@@ -81,108 +81,121 @@ placeholder domain.
 | `android/app/src/main/java/com/smartattendance/app/MainActivity.kt` | startup `Log.e` if built with the placeholder domain |
 | `.github/workflows/build-apk.yml` | passes `API_BASE_URL` from repo variable to Gradle |
 | `scripts/build-apk.sh` | honours `API_BASE_URL` |
-| `docs/backend-hardening.js` (new) | drop-in Express module: trust proxy, CORS allowlist, helmet, rate limits, auth gate audit |
+| `docs/BACKEND_HARDENING.md` (new) | backend audit + the exact Fastify changes, with the env checklist and verification steps |
+| `docs/backend-hardening.patch` (new) | unified diff for the Fastify API (`git apply` inside the backend repo) |
+| `docs/backend-files/` (new) | the same modified/new backend files, for copy-paste if the patch does not apply |
 | `docs/DOMAIN_AND_API_SECURITY.md` (new) | this document |
 | `ANDROID_BUILD.md` | points at the new configuration |
 
-The backend source is **not** in this repository, so section 3 is a precise
-patch + checklist for the API repo on Render. `docs/backend-hardening.js` is
-ready to copy in.
+The backend (Fastify 5 + Prisma) is not part of this repository, so the backend
+changes ship as `docs/backend-hardening.patch` plus `docs/backend-files/`.
+Section 3 summarises them; `docs/BACKEND_HARDENING.md` has the file-by-file
+detail and the exact `git apply` / `npm test` commands.
 
 ---
 
 ## 3. Backend changes (Render API)
 
-### 3.1 Trust the Cloudflare proxy
+### 3.1 Real client IP behind Cloudflare and Render
 
-```js
-// before any middleware that reads req.ip
-app.set('trust proxy', 1);   // exactly one hop: Cloudflare → Render
+`src/app.ts` used `trustProxy: true`, which lets a client pick its own entry in
+`X-Forwarded-For` and therefore its own rate-limit bucket. It now trusts exactly
+the configured number of hops:
+
+```ts
+trustProxy: (address, hop) => hop < config.TRUST_PROXY_HOPS, // default 1
 ```
 
-- Use `1`, **not** `true`. With `true`, a client can send its own
-  `X-Forwarded-For` and bypass IP rate limits.
-- If you ever add another proxy in front of Render, raise the number to match.
-- Resolve the real IP explicitly for logging/rate limiting:
+On top of that, `src/utils/network.ts` resolves the address once per request and
+stores it on `req.clientIp`:
 
-```js
-app.use((req, _res, next) => {
-  const cf = req.headers['cf-connecting-ip'];
-  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  req.clientIp = (typeof cf === 'string' && cf.trim()) || xff || req.ip;
-  next();
-});
+1. `CF-Connecting-IP` (Cloudflare always overwrites it on proxied requests)
+2. `True-Client-IP` (Cloudflare alias)
+3. the **right-most** valid `X-Forwarded-For` entry — proxies append, so a client
+   cannot forge what comes after its own address
+4. `X-Real-IP`, then the socket address
+
+Rate limiting, activity logs and the audit trail all read `req.clientIp`, so the
+limits follow the browser/app rather than Cloudflare's edge.
+
+> The service must stay reachable **only** through Cloudflare, otherwise a
+> caller can send its own `CF-Connecting-IP`. Set `TRUST_CF_CONNECTING_IP=false`
+> if you also call Render directly (e.g. during testing).
+
+### 3.2 CORS: web origins only, but Origin-less clients still work
+
+`@fastify/cors` is registered with a delegate instead of a blanket value:
+
+```ts
+origin: (origin, cb) => cb(null, originMatcher(origin)),
+credentials: false,                    // bearer tokens, not cookies
+methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Accept-Language',
+                 'X-Requested-With', 'X-Enroll-Key'],
+exposedHeaders: ['Content-Disposition', 'Retry-After'],
+maxAge: 86400,
 ```
 
-### 3.2 CORS: web origin only, but allow missing Origin
-
-```js
-const allowed = parseOrigins(process.env.CORS_ORIGINS); // "https://yourdomain.com"
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin) return cb(null, true);          // native app / curl / health checks
-    if (allowed.includes(origin.replace(/\/+$/, ''))) return cb(null, true);
-    return cb(null, false);                       // browser blocks it; no 500
-  },
-  credentials: false,                             // bearer tokens, not cookies
-  allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'X-Requested-With'],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  maxAge: 86400,
-}));
-```
-
-- The Android app sends **no** `Origin` header — that is why the `!origin` branch
-  must allow the request. It is not a CSRF hole: CSRF requires a browser
-  sending ambient credentials, which this API does not use.
-- Add every web origin you actually serve (e.g. the Vercel preview domain)
-  to `CORS_ORIGINS`, comma-separated. Do **not** use `*` together with
-  credentials, and do not reflect arbitrary origins.
+- `originMatcher` accepts the entries of `CORS_ORIGINS` (exact origins and
+  `https://*.example.com` wildcards), normalising case and trailing slashes.
+- A request **without** an `Origin` header (the Android app, curl, the ESP32
+  nodes) is allowed — that is not a CSRF hole because the API uses bearer
+  tokens, never ambient cookies.
+- Any other browser origin gets **no** `Access-Control-Allow-Origin` header, so
+  the browser blocks the response while the server still answers normally.
+- `CORS_ORIGINS="*"` is still allowed in development but `loadConfig` refuses it
+  in production, and entries with a path or query string are rejected.
 
 ### 3.3 Rate limiting on the public/auth routes
 
-Mount limiters **before** the controllers, after the proxy/real-IP middleware:
+The global limiter stays at `RATE_LIMIT_MAX` (default 300/min) but is now keyed
+by `req.clientIp`, and each auth route carries its own budget:
 
-```js
-const { authLimiter, accountLimiter, resetLimiter, apiLimiter } = buildLimiters();
-app.post('/api/auth/login', authLimiter, loginHandler);
-app.post('/api/auth/register/student', accountLimiter, registerHandler);
-app.post('/api/auth/forgot-password', resetLimiter, forgotHandler);
-app.post('/api/auth/reset-password', resetLimiter, resetHandler);
-app.use('/api', apiLimiter);           // broad backstop, mounted after the above
-```
+| Route | Limit |
+| --- | --- |
+| `POST /api/auth/login` | 10 / 15 min |
+| `POST /api/auth/register/student` | 20 / hour |
+| `POST /api/auth/forgot-password` | 5 / 15 min |
+| `POST /api/auth/reset-password` | 10 / 15 min (+ 5 wrong-code tries per account) |
+| `POST /api/auth/change-password` | 10 / 15 min |
 
-Suggested starting limits (tune from traffic): login 10 / 15 min / IP with
-`skipSuccessfulRequests: true`; account creation and password reset 5–20 / hour /
-IP; global 300 / min / IP (the clients poll every 5–60 s). The 429 body must
-keep the app's error contract:
+A rejected request returns HTTP 429 in the shared envelope (the same one the web
+and Android clients already parse):
 
 ```json
-{ "error": { "code": "RATE_LIMITED", "message": "Too many attempts…" } }
+{ "error": { "code": "RATE_LIMITED", "message": "Too many requests. Try again in 15 minutes.", "details": { "max": 10, "retryAfter": "15 minutes" } } }
 ```
 
-Cloudflare rate-limiting rules (Security → WAF → Rate limiting rules) are a good
-second layer on `/api/auth/*`; they use `CF-Connecting-IP` natively.
+Cloudflare rate-limiting rules (Security → WAF → Rate limiting rules) remain a
+useful second layer on `/api/auth/*`; they use `CF-Connecting-IP` natively.
 
 ### 3.4 Authentication coverage
 
-- Every `/api` route except login, student sign-up, forgot/reset password,
-  logout, public departments and health must require a valid bearer token and
-  the right role (`LECTURER`, `STUDENT`, …).
-- Run `assertProtectedRoutes(app)` at boot in staging: it walks the router and
-  warns about any `/api` route that is not in the public allowlist, so a new
-  route that forgets the auth middleware is caught immediately.
-- Reject tokens whose subject does not match the resource (e.g. a student
-  reading `/api/lecturer/sessions/:id`), and keep the existing 401 contract so
-  clients clear their session.
+Audited every route in `src/routes/*.ts`: the only unauthenticated endpoints are
+`/api/auth/login`, `/api/auth/register/student`, `/api/auth/forgot-password`,
+`/api/auth/reset-password`, `/api/public/departments`, `GET /health` and
+`POST /api/nodes/heartbeat` (which requires the ESP32 node key or the enrolment
+key). Everything else is mounted behind `authenticate` / `requireRole(...)`:
+
+- `/api/student/*`, `/api/attendance/ble-observation` → `STUDENT`
+- `/api/lecturer/*` → `LECTURER`
+- `/api/admin/*` → `ADMIN` (plus `ADMIN`-only rooms/nodes)
+- `/api/qa/*` → `QA` (academic and report routes are also mounted under
+  `/api/admin` for admins)
+
+Tokens are revoked server-side on logout (`revokedToken.jti`), inactive accounts
+are rejected, and scope tokens are refused.
 
 ### 3.5 Response/security headers
 
-- `helmet()` for `X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy`, HSTS, etc.
-- `Cache-Control: no-store` on all API responses (the module does this). This is
-  what stops Cloudflare from caching one user's JSON for another user.
-- Keep `Access-Control-Expose-Headers: Content-Disposition` if exports are
-  downloaded by the web app.
+- `helmet` stays on (`X-Content-Type-Options`, `Referrer-Policy`, HSTS, …).
+- A new `onSend` hook sets `Cache-Control: no-store` and `Pragma: no-cache` on
+  every `/api` and `/health` response, so neither Cloudflare nor a browser can
+  replay one user's JSON.
+- `Access-Control-Expose-Headers` still exposes `Content-Disposition` for CSV
+  exports (and now `Retry-After`).
+- The effective proxy/CORS/rate-limit configuration is logged at startup
+  (`http security configuration`).
 
 ### 3.6 Cloudflare settings
 
@@ -207,8 +220,9 @@ second layer on `/api/auth/*`; they use `CF-Connecting-IP` natively.
 | --- | --- | --- |
 | `CORS_ORIGINS` | `https://yourdomain.com,https://www.yourdomain.com` | comma-separated, no trailing slash |
 | `NODE_ENV` | `production` | enables strict behaviour |
-| `TRUST_PROXY` | `1` (or hard-code `app.set('trust proxy', 1)`) | must match the proxy hops |
-| `RATE_LIMIT_DISABLED` | unset | only set `1` in tests |
+| `TRUST_PROXY_HOPS` | `1` | proxies in front of Render; `0` ignores forwarded headers |
+| `TRUST_CF_CONNECTING_IP` | `true` | use Cloudflare's `CF-Connecting-IP` as the client address |
+| `RATE_LIMIT_MAX` | `300` | requests/minute/IP for the whole API (auth routes have their own) |
 
 Keep database URLs, JWT secrets and mail credentials **only** here — never in a
 client app.
@@ -268,8 +282,11 @@ for i in $(seq 1 15); do
     -d '{"email":"nobody@example.com","password":"wrong-password"}'
 done; echo
 
-# 6. Real IP is logged/limited per client, not per proxy
-curl -sS -i https://yourdomain.com/api/health -H 'CF-Connecting-IP: 203.0.113.7'
+# 6. Real IP is logged/limited per client, not per proxy (429 once the bucket is empty)
+curl -sS -i https://yourdomain.com/health -H 'CF-Connecting-IP: 203.0.113.7'
+
+# 7. Responses must not be cacheable
+curl -sS -D- -o /dev/null https://yourdomain.com/api/public/departments | grep -i cache-control
 ```
 
 Client checks

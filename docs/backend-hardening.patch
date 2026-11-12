@@ -1,0 +1,722 @@
+diff --git a/.env.example b/.env.example
+index 6bcc21d..a13499c 100644
+--- a/.env.example
++++ b/.env.example
+@@ -6,8 +6,20 @@ DIRECT_URL=
+ # Long random string (>= 32 chars): openssl rand -base64 48
+ JWT_SECRET=
+ NODE_ENV=production
+-# Comma-separated origins of the four Edge.dev frontends, e.g. https://student.example,https://lecturer.example,https://qa.example,https://admin.example
++# Comma-separated browser origins of the four frontends. Bare origins only (no path, no trailing
++# slash). Required in production - "*" is refused there. The Android app and the ESP32 nodes send
++# no Origin header at all, so they keep working with an explicit list.
++# e.g. https://student.attendance.example,https://lecturer.attendance.example,https://qa.attendance.example,https://admin.attendance.example
+ CORS_ORIGINS=
++# How many proxies sit in front of the app. Render's edge = 1 (Cloudflare is handled by the header
++# below). Set 0 to ignore X-Forwarded-For entirely.
++TRUST_PROXY_HOPS=1
++# Cloudflare puts the real client IP in CF-Connecting-IP; this makes rate limiting and the activity
++# log see the browser instead of Cloudflare's edge. Leave true while the Render service is only
++# reachable through Cloudflare; set false if you call Render directly.
++TRUST_CF_CONNECTING_IP=true
++# Requests per minute per client IP for the whole API (login/register/reset have their own limits).
++RATE_LIMIT_MAX=300
+ 
+ # ---- optional ----
+ PORT=3000
+diff --git a/README.md b/README.md
+index b15e87b..aaae46a 100644
+--- a/README.md
++++ b/README.md
+@@ -26,3 +26,41 @@ Layout: `src/routes` (HTTP), `src/services` (attendance rules, reports, notifica
+ Roles: `ADMIN` (staff accounts, students, activity), `QA` (departments, courses, lecturers, rooms,
+ nodes, class records, reports), `LECTURER`, `STUDENT`. Academic/room/report routes are served under
+ `/api/qa/*` (and also `/api/admin/*` for admins).
++
++## Custom domain, proxies, CORS and rate limits
++
++The API is meant to sit behind Cloudflare -> Render, e.g. `https://api.attendance.example.com`.
++Three environment variables describe that chain, and the app logs the effective values at startup
++(`http security configuration`):
++
++| Variable | Default | Meaning |
++|---|---|---|
++| `CORS_ORIGINS` | *(empty, refused in production)* | Comma-separated bare origins of the web frontends. `*` is refused in production. Requests with **no** `Origin` header - the Android app, curl, the ESP32 nodes - are always allowed. |
++| `TRUST_PROXY_HOPS` | `1` | Proxies between the internet and the process. Render's edge is one hop. Set `0` to ignore forwarded headers. |
++| `TRUST_CF_CONNECTING_IP` | `true` | Read Cloudflare's `CF-Connecting-IP` as the client address (falls back to the right-most `X-Forwarded-For` entry, then the socket). |
++| `RATE_LIMIT_MAX` | `300` | Requests per minute per client IP for the whole API. |
++
++Per-route limits, all bucketed by the real client IP (`req.clientIp`):
++
++| Route | Limit |
++|---|---|
++| `POST /api/auth/login` | 10 / 15 min |
++| `POST /api/auth/register/student` | 20 / hour |
++| `POST /api/auth/forgot-password` | 5 / 15 min |
++| `POST /api/auth/reset-password` | 10 / 15 min (plus 5 wrong-code tries per account) |
++| `POST /api/auth/change-password` | 10 / 15 min |
++
++Exceeding a limit returns HTTP 429 with the usual envelope:
++
++```json
++{ "error": { "code": "RATE_LIMITED", "message": "Too many requests. Try again in 15 minutes.", "details": { "max": 10, "retryAfter": "15 minutes" } } }
++```
++
++Every `/api/*` route except the public set (`/api/auth/login`, `/api/auth/register/student`,
++`/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/public/*`, `/api/nodes/heartbeat`
++with its node key) runs behind `authenticate` / `requireRole(...)`, and API responses are sent with
++`Cache-Control: no-store`.
++
++Keep the Render service reachable **only** through Cloudflare (Cloudflare DNS proxied, and Render
++firewall / Access rule blocking direct traffic), otherwise a caller can forge `CF-Connecting-IP` and
++pick its own rate-limit bucket.
+diff --git a/src/app.ts b/src/app.ts
+index 6c70189..4de1518 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -7,6 +7,7 @@ import { ZodError } from "zod";
+ import { loadConfig, parseCorsOrigins, type Config } from "./config.js";
+ import { createPrisma, type Db } from "./db.js";
+ import { AppError } from "./utils/errors.js";
++import { clientIpOf, createOriginMatcher } from "./utils/network.js";
+ import { authRoutes } from "./routes/auth.js";
+ import { studentRoutes } from "./routes/student.js";
+ import { lecturerRoutes } from "./routes/lecturer.js";
+@@ -33,7 +34,15 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
+ 
+   const app = Fastify({
+     logger: opts.logger ?? config.NODE_ENV !== "test",
+-    trustProxy: true, // Render terminates TLS in front of the app
++    // Render terminates TLS one hop in front of us; Cloudflare sits in front of Render.
++    // Trusting exactly the configured number of hops keeps forged X-Forwarded-For headers
++    // from being able to pick their own client IP (and therefore their own rate-limit bucket).
++    // Fastify's typings only accept a hop predicate (a raw number works at runtime but not in
++    // the type definitions), so express "trust N hops" as "trust while hop < N".
++    trustProxy:
++      config.TRUST_PROXY_HOPS === 0
++        ? false
++        : (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS,
+     bodyLimit: 1_000_000,
+   });
+ 
+@@ -41,18 +50,62 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
+   app.decorate("appConfig", config);
+   app.decorate("mailer", opts.mailer ?? createMailer(config));
+   app.decorateRequest("auth", null as never);
++  app.decorateRequest("clientIp", "");
++
++  // Resolve the real client address once per request: rate limiting, activity logs and the
++  // audit trail all read `req.clientIp` instead of the proxy's socket address.
++  app.addHook("onRequest", async (req) => {
++    req.clientIp = clientIpOf(req.headers, req.socket.remoteAddress ?? req.ip, {
++      trustCfConnectingIp: config.TRUST_CF_CONNECTING_IP,
++    });
++  });
++
++  // API responses are per-user and authenticated: never let a proxy or browser cache them.
++  app.addHook("onSend", async (req, reply, payload) => {
++    if (req.url.startsWith("/api") || req.url === "/health") {
++      reply.header("cache-control", "no-store");
++      reply.header("pragma", "no-cache");
++    }
++    return payload;
++  });
+ 
+   await app.register(helmet);
++
++  const corsOrigins = parseCorsOrigins(config.CORS_ORIGINS);
++  const originMatcher = createOriginMatcher(Array.isArray(corsOrigins) ? corsOrigins : ["*"]);
+   await app.register(cors, {
+-    origin: parseCorsOrigins(config.CORS_ORIGINS),
+-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+-    allowedHeaders: ["Content-Type", "Authorization"],
+-    exposedHeaders: ["Content-Disposition"],
++    // Requests without an Origin header (the Android app, curl, the ESP32 nodes) are allowed;
++    // browsers always send one, so only the listed web origins get an Access-Control-Allow-Origin
++    // header and anything else is blocked by the browser.
++    origin: (origin, cb) => cb(null, originMatcher(origin)),
++    credentials: false,
++    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
++    allowedHeaders: [
++      "Content-Type",
++      "Authorization",
++      "Accept",
++      "Accept-Language",
++      "X-Requested-With",
++      "X-Enroll-Key",
++    ],
++    exposedHeaders: ["Content-Disposition", "Retry-After"],
++    maxAge: 86_400,
++    strictPreflight: true,
+   });
++
+   await app.register(rateLimit, {
+     global: true,
+-    max: config.NODE_ENV === "test" ? 10_000 : 300,
++    max: config.NODE_ENV === "test" ? 10_000 : config.RATE_LIMIT_MAX,
+     timeWindow: "1 minute",
++    // Bucket per real client IP, not per proxy.
++    keyGenerator: (req) => req.clientIp || req.ip,
++    // The plugin *throws* whatever this returns, so hand it a real AppError: our error handler
++    // then formats it as the usual `{ error: { code, message } }` envelope with a 429 status.
++    errorResponseBuilder: (_req, context) =>
++      new AppError(429, "RATE_LIMITED", `Too many requests. Try again in ${context.after}.`, {
++        max: context.max,
++        retryAfter: context.after,
++      }),
+   });
+   await app.register(jwt, {
+     secret: config.JWT_SECRET,
+@@ -101,5 +154,15 @@ export async function buildApp(opts: BuildOptions = {}): Promise<FastifyInstance
+   app.addHook("onClose", async () => {
+     if (!opts.prisma) await prisma.$disconnect();
+   });
++
++  app.log.info(
++    {
++      trustProxy: config.TRUST_PROXY_HOPS,
++      trustCfConnectingIp: config.TRUST_CF_CONNECTING_IP,
++      corsOrigins: Array.isArray(corsOrigins) ? corsOrigins : "*",
++      rateLimitPerMinute: config.RATE_LIMIT_MAX,
++    },
++    "http security configuration",
++  );
+   return app;
+ }
+diff --git a/src/config.ts b/src/config.ts
+index b97babf..2671b7d 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -15,6 +15,16 @@ const schema = z.object({
+   JWT_EXPIRES_IN: z.string().default("12h"),
+   /** Comma separated list of allowed browser origins, or "*" (development only). */
+   CORS_ORIGINS: z.string().default(""),
++  /**
++   * How many proxy hops sit between the internet and this process.
++   * Render's edge is one hop; keep 1 unless you add another proxy in front of Render.
++   * 0 disables X-Forwarded-For parsing entirely.
++   */
++  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
++  /** Cloudflare puts the real client IP in CF-Connecting-IP. Turn off if you are not behind Cloudflare. */
++  TRUST_CF_CONNECTING_IP: bool,
++  /** Requests allowed per minute per client IP for the whole API. */
++  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+ 
+   /** Local time zone as minutes east of UTC (Ghana = 0). Used to turn "HH:mm" schedules into instants. */
+   TZ_OFFSET_MINUTES: z.coerce.number().int().default(0),
+@@ -67,6 +77,24 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
+   if (cfg.NODE_ENV === "production" && (cfg.CORS_ORIGINS.trim() === "" || cfg.CORS_ORIGINS.trim() === "*")) {
+     throw new Error("CORS_ORIGINS must list the frontend origins explicitly in production");
+   }
++  const badOrigins: string[] = [];
++  for (const entry of cfg.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)) {
++    if (entry === "*") continue;
++    const bare = entry.replace(/\*/, "wildcard");
++    let ok = false;
++    try {
++      const url = new URL(bare);
++      ok = (url.protocol === "http:" || url.protocol === "https:") && url.pathname === "/" && !url.search && !url.hash;
++    } catch {
++      ok = false;
++    }
++    if (!ok) badOrigins.push(entry);
++  }
++  if (badOrigins.length > 0) {
++    throw new Error(
++      `CORS_ORIGINS entries must be bare origins like https://attendance.example.com (no path, query or trailing slash): ${badOrigins.join(", ")}`,
++    );
++  }
+   if (cfg.NODE_ENROLL_KEY && cfg.NODE_ENROLL_KEY.length < 16) {
+     throw new Error("NODE_ENROLL_KEY must be at least 16 characters (or leave it empty to turn auto-registration off)");
+   }
+diff --git a/src/routes/auth.ts b/src/routes/auth.ts
+index dbd4eb3..45240a1 100644
+--- a/src/routes/auth.ts
++++ b/src/routes/auth.ts
+@@ -1,4 +1,4 @@
+-import type { FastifyPluginAsync } from "fastify";
++import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+ import { z } from "zod";
+ import { authenticate } from "../auth/context.js";
+ import { AppError, parse } from "../utils/errors.js";
+@@ -66,12 +66,34 @@ export function publicUser(u: {
+ export const authRoutes: FastifyPluginAsync = async (app) => {
+   const db = app.prisma;
+   const cfg = app.appConfig;
+-  const strict = { config: { rateLimit: { max: cfg.NODE_ENV === "test" ? 10_000 : 10, timeWindow: "1 minute" } } };
++  /**
++   * Per-route throttles, bucketed by real client IP (see `req.clientIp` in app.ts) so a forged
++   * X-Forwarded-For header cannot buy a fresh bucket, and so one abusive address cannot lock a
++   * legitimate user out. Tests run with a very high ceiling.
++   */
++  const limiter = (max: number, timeWindow: string) => ({
++    config: {
++      rateLimit: {
++        max: cfg.NODE_ENV === "test" ? 10_000 : max,
++        timeWindow,
++        keyGenerator: (req: FastifyRequest) => req.clientIp || req.ip,
++      },
++    },
++  });
++  /** Password guessing: 10 attempts per 15 minutes per address. */
++  const loginLimit = limiter(10, "15 minutes");
++  /** Account farming: 20 sign-ups per hour per address. */
++  const registerLimit = limiter(20, "1 hour");
++  /** Reset codes are 6 digits, so minting them is expensive by design: 5 per 15 minutes. */
++  const resetRequestLimit = limiter(5, "15 minutes");
++  /** Enough to retype a code, and the per-account 5-wrong-tries counter still applies. */
++  const resetConfirmLimit = limiter(10, "15 minutes");
++  const passwordChangeLimit = limiter(10, "15 minutes");
+ 
+   const issue = (user: { id: string; role: string }) =>
+     app.jwt.sign({ sub: user.id, role: user.role, jti: randomUUID() });
+ 
+-  app.post("/register/student", strict, async (req, reply) => {
++  app.post("/register/student", registerLimit, async (req, reply) => {
+     const body = parse(registerSchema, req.body);
+     const clash = await db.user.findUnique({ where: { email: body.email } });
+     if (clash) throw new AppError(409, "EMAIL_TAKEN", "An account with this email already exists");
+@@ -95,7 +117,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
+     return reply.status(201).send({ token: issue(user), user: publicUser(user) });
+   });
+ 
+-  app.post("/login", strict, async (req) => {
++  app.post("/login", loginLimit, async (req) => {
+     const body = parse(loginSchema, req.body);
+     const user = await db.user.findUnique({
+       where: { email: body.email },
+@@ -115,7 +137,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
+   // Password reset by e-mailed 6-digit code. The response is identical whether or not the account exists.
+   const codeHash = (userId: string, code: string) => sha256(`${userId}:${code}`);
+ 
+-  app.post("/forgot-password", strict, async (req) => {
++  app.post("/forgot-password", resetRequestLimit, async (req) => {
+     const body = parse(forgotSchema, req.body);
+     const user = await db.user.findUnique({ where: { email: body.email } });
+     if (user && user.isActive) {
+@@ -141,7 +163,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
+     return { ok: true, message: "If that email has an account, a 6-digit code has been sent." };
+   });
+ 
+-  app.post("/reset-password", strict, async (req) => {
++  app.post("/reset-password", resetConfirmLimit, async (req) => {
+     const body = parse(resetSchema, req.body);
+     const bad = () => new AppError(400, "INVALID_RESET_CODE", "This code is wrong or has expired. Request a new one.");
+     const user = await db.user.findUnique({ where: { email: body.email } });
+@@ -183,7 +205,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
+     };
+   });
+ 
+-  app.post("/change-password", { preHandler: authenticate, ...strict }, async (req) => {
++  app.post("/change-password", { preHandler: authenticate, ...passwordChangeLimit }, async (req) => {
+     const body = parse(changePasswordSchema, req.body);
+     const user = await db.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
+     if (!(await verifyPassword(body.currentPassword, user.passwordHash))) {
+diff --git a/src/types.d.ts b/src/types.d.ts
+index a51ab0e..68fa07e 100644
+--- a/src/types.d.ts
++++ b/src/types.d.ts
+@@ -11,5 +11,7 @@ declare module "fastify" {
+   }
+   interface FastifyRequest {
+     auth: AuthContext;
++    /** Real client address (Cloudflare / X-Forwarded-For aware). Set in app.ts. */
++    clientIp: string;
+   }
+ }
+diff --git a/src/utils/network.ts b/src/utils/network.ts
+new file mode 100644
+index 0000000..3c67503
+--- /dev/null
++++ b/src/utils/network.ts
+@@ -0,0 +1,155 @@
++/** Proxy, client-IP and CORS helpers shared by the server bootstrap and the routes. */
++
++const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
++
++export function isIpV4(value: string): boolean {
++  if (!IPV4.test(value)) return false;
++  return value.split(".").every((octet) => Number(octet) <= 255);
++}
++
++/** Loose but safe IPv6 check (also accepts IPv4-mapped addresses like ::ffff:10.0.0.1). */
++export function isIpV6(value: string): boolean {
++  if (!value.includes(":")) return false;
++  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(value);
++  if (mapped) return isIpV4(mapped[1]);
++  if (!/^[0-9a-fA-F:]+$/.test(value)) return false;
++  if (value.includes(":::")) return false;
++  return (value.match(/:/g) ?? []).length >= 2;
++}
++
++export function isIpAddress(value: unknown): value is string {
++  if (typeof value !== "string") return false;
++  const v = value.trim();
++  if (v.length === 0 || v.length > 64) return false;
++  return isIpV4(v) || isIpV6(v);
++}
++
++type HeaderBag = Record<string, string | string[] | undefined>;
++
++function header(headers: HeaderBag, name: string): string | undefined {
++  const raw = headers[name] ?? headers[name.toLowerCase()];
++  if (Array.isArray(raw)) return raw.join(",");
++  return raw;
++}
++
++/** Strips brackets / ports that a proxy may append to the address it recorded. */
++function cleanAddress(raw: string): string {
++  const v = raw.trim();
++  if (v.startsWith("[")) {
++    const end = v.indexOf("]");
++    return end > 0 ? v.slice(1, end) : v;
++  }
++  // "1.2.3.4:5678" but not a bare IPv6 address
++  if (isIpV4(v.split(":")[0] ?? "") && v.includes(":") && !isIpV6(v)) return v.split(":")[0];
++  return v;
++}
++
++export interface ClientIpOptions {
++  /**
++   * Read Cloudflare's `CF-Connecting-IP` first. Cloudflare overwrites that header on every
++   * request it proxies, so it is the browser's real address - provided the service cannot be
++   * reached directly (keep Render behind the Cloudflare proxy / block non-Cloudflare traffic).
++   */
++  trustCfConnectingIp?: boolean;
++}
++
++/**
++ * The address a request really came from.
++ *
++ * Render terminates TLS in front of the app, so the socket peer is always a proxy. Order:
++ *   1. Cloudflare's `CF-Connecting-IP` (set by the edge, cannot be forged while proxied)
++ *   2. Cloudflare's `True-Client-IP` (Enterprise alias)
++ *   3. the right-most valid `X-Forwarded-For` entry - proxies append, so the last entry is the
++ *      one our trusted edge wrote; a client cannot control what comes after its own address
++ *   4. `X-Real-IP`
++ *   5. the socket address
++ */
++export function clientIpOf(
++  headers: HeaderBag,
++  fallback: string,
++  opts: ClientIpOptions = {},
++): string {
++  if (opts.trustCfConnectingIp !== false) {
++    for (const name of ["cf-connecting-ip", "true-client-ip"]) {
++      const candidate = cleanAddress(header(headers, name) ?? "");
++      if (isIpAddress(candidate)) return candidate;
++    }
++  }
++  const forwarded = header(headers, "x-forwarded-for");
++  if (forwarded) {
++    const parts = forwarded.split(",").map((s) => cleanAddress(s)).filter(Boolean);
++    for (let i = parts.length - 1; i >= 0; i -= 1) {
++      if (isIpAddress(parts[i])) return parts[i];
++    }
++  }
++  const realIp = cleanAddress(header(headers, "x-real-ip") ?? "");
++  if (isIpAddress(realIp)) return realIp;
++  return fallback;
++}
++
++/** Normalises `https://a.app/` to `https://a.app`; returns null for anything that is not an http(s) origin. */
++export function normalizeOrigin(value: string): string | null {
++  const v = value.trim().replace(/\/+$/, "");
++  if (!v || v === "*") return null;
++  try {
++    const url = new URL(v);
++    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
++    return url.origin.toLowerCase();
++  } catch {
++    return null;
++  }
++}
++
++function wildcardPattern(entry: string): RegExp | null {
++  const v = entry.trim().replace(/\/+$/, "").toLowerCase();
++  if (!v.includes("*")) return null;
++  const escaped = v.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+");
++  try {
++    return new RegExp(`^${escaped}$`);
++  } catch {
++    return null;
++  }
++}
++
++export interface OriginMatcherOptions {
++  /** When no Origin header is sent (native app, curl, server-to-server) allow the request. */
++  allowMissingOrigin?: boolean;
++}
++
++/**
++ * Builds a predicate for `@fastify/cors`'s `origin` delegate.
++ * - explicit list of origins, `https://*.example.com` wildcards supported
++ * - `*` allows everything (development only; `loadConfig` already refuses it in production)
++ * - requests without an `Origin` header are allowed, because browsers always send one while the
++ *   Android app and the ESP32 nodes never do
++ */
++export function createOriginMatcher(
++  origins: string[],
++  opts: OriginMatcherOptions = {},
++): (origin: string | undefined) => boolean {
++  const allowMissing = opts.allowMissingOrigin !== false;
++  if (origins.some((o) => o.trim() === "*")) return () => true;
++
++  const exact = new Set<string>();
++  const patterns: RegExp[] = [];
++  for (const raw of origins) {
++    if (!raw || !raw.trim()) continue;
++    const pattern = wildcardPattern(raw);
++    if (pattern) {
++      patterns.push(pattern);
++      continue;
++    }
++    const normalized = normalizeOrigin(raw);
++    if (normalized) exact.add(normalized);
++  }
++
++  return (origin) => {
++    if (origin === undefined || origin === "") return allowMissing;
++    // "null" is what sandboxed iframes and file:// pages send - never a real frontend.
++    if (origin === "null") return false;
++    const normalized = normalizeOrigin(origin);
++    if (!normalized) return false;
++    if (exact.has(normalized)) return true;
++    return patterns.some((p) => p.test(normalized));
++  };
++}
+diff --git a/tests/unit/httpSecurity.test.ts b/tests/unit/httpSecurity.test.ts
+new file mode 100644
+index 0000000..74e8529
+--- /dev/null
++++ b/tests/unit/httpSecurity.test.ts
+@@ -0,0 +1,90 @@
++import { describe, expect, it, afterAll } from "vitest";
++import { buildApp } from "../../src/app.js";
++import { loadConfig } from "../../src/config.js";
++
++const cfg = loadConfig({
++  NODE_ENV: "development",
++  DATABASE_URL: "postgres://x/y",
++  JWT_SECRET: "s".repeat(40),
++  CORS_ORIGINS: "https://attendance.example.com",
++  RATE_LIMIT_MAX: "3",
++  TRUST_PROXY_HOPS: "1",
++  TRUST_CF_CONNECTING_IP: "true",
++  LOG_LEVEL: "silent",
++} as Record<string, string>);
++
++const appPromise = buildApp({ config: cfg, prisma: {} as never, logger: false });
++afterAll(async () => { (await appPromise).close(); });
++
++/**
++ * Wiring checks that need no database: CORS allow-list, no-store headers, client-IP based
++ * rate limiting and the shared error envelope. `buildApp` receives a stub Prisma client.
++ */
++describe("http security wiring", () => {
++  it("sets no-store on API responses", async () => {
++    const app = await appPromise;
++    const res = await app.inject({ method: "GET", url: "/health" });
++    expect(res.statusCode).toBe(200);
++    expect(res.headers["cache-control"]).toBe("no-store");
++  });
++
++  it("answers the preflight for an allowed origin only", async () => {
++    const app = await appPromise;
++    const ok = await app.inject({
++      method: "OPTIONS",
++      url: "/api/auth/login",
++      headers: { origin: "https://attendance.example.com", "access-control-request-method": "POST" },
++    });
++    expect(ok.statusCode).toBe(204);
++    expect(ok.headers["access-control-allow-origin"]).toBe("https://attendance.example.com");
++
++    const bad = await app.inject({
++      method: "OPTIONS",
++      url: "/api/auth/login",
++      headers: { origin: "https://evil.example.com", "access-control-request-method": "POST" },
++    });
++    expect(bad.headers["access-control-allow-origin"]).toBeUndefined();
++  });
++
++  it("still serves requests with no Origin header (Android app)", async () => {
++    const app = await appPromise;
++    const res = await app.inject({
++      method: "POST",
++      url: "/api/public/departments",
++      headers: { "cf-connecting-ip": "203.0.113.99" },
++    });
++    expect(res.statusCode).not.toBe(403);
++    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
++  });
++
++  it("returns the shared error envelope when the limit is hit", async () => {
++    const app = await appPromise;
++    const codes: number[] = [];
++    let last: { body: string } | undefined;
++    const limit = cfg.RATE_LIMIT_MAX;
++    for (let i = 0; i < limit + 2; i += 1) {
++      const res = await app.inject({ method: "GET", url: "/health", headers: { "cf-connecting-ip": "41.66.10.9" } });
++      codes.push(res.statusCode);
++      last = res;
++    }
++    expect(codes).toContain(429);
++    expect(JSON.parse(last!.body)).toMatchObject({ error: { code: "RATE_LIMITED" } });
++  });
++
++  it("buckets rate limits per client IP, not per proxy", async () => {
++    const app = await appPromise;
++    const other: number[] = [];
++    for (let i = 0; i < cfg.RATE_LIMIT_MAX; i += 1) {
++      const res = await app.inject({ method: "GET", url: "/health", headers: { "cf-connecting-ip": "203.0.113.50" } });
++      other.push(res.statusCode);
++    }
++    expect(other.every((code) => code === 200)).toBe(true);
++    // A spoofed X-Forwarded-For must not hand the throttled client a fresh bucket.
++    const spoofed = await app.inject({
++      method: "GET",
++      url: "/health",
++      headers: { "cf-connecting-ip": "41.66.10.9", "x-forwarded-for": "10.9.9.9" },
++    });
++    expect(spoofed.statusCode).toBe(429);
++  });
++});
+diff --git a/tests/unit/network.test.ts b/tests/unit/network.test.ts
+new file mode 100644
+index 0000000..2227487
+--- /dev/null
++++ b/tests/unit/network.test.ts
+@@ -0,0 +1,133 @@
++import { describe, expect, it } from "vitest";
++import { clientIpOf, createOriginMatcher, isIpAddress, normalizeOrigin } from "../../src/utils/network.js";
++import { loadConfig } from "../../src/config.js";
++
++const cf = { "cf-connecting-ip": "41.66.10.9" };
++const xff = { "x-forwarded-for": "203.0.113.7" };
++
++describe("client address resolution", () => {
++  it("accepts IPv4 and IPv6, rejects junk", () => {
++    expect(isIpAddress("41.66.10.9")).toBe(true);
++    expect(isIpAddress("999.1.1.1")).toBe(false);
++    expect(isIpAddress("::1")).toBe(true);
++    expect(isIpAddress("::ffff:41.66.10.9")).toBe(true);
++    expect(isIpAddress("not-an-ip")).toBe(false);
++    expect(isIpAddress("")).toBe(false);
++    expect(isIpAddress(undefined)).toBe(false);
++  });
++
++  it("prefers Cloudflare's CF-Connecting-IP", () => {
++    expect(clientIpOf({ ...cf, ...xff }, "10.0.0.1")).toBe("41.66.10.9");
++  });
++
++  it("ignores a spoofed CF-Connecting-IP when Cloudflare is not trusted", () => {
++    expect(clientIpOf({ ...cf, ...xff }, "10.0.0.1", { trustCfConnectingIp: false })).toBe("203.0.113.7");
++  });
++
++  it("ignores a malformed CF-Connecting-IP", () => {
++    expect(clientIpOf({ "cf-connecting-ip": "attacker", ...xff }, "10.0.0.1")).toBe("203.0.113.7");
++  });
++
++  it("takes the right-most X-Forwarded-For entry, so a client cannot forge its bucket", () => {
++    expect(clientIpOf({ "x-forwarded-for": "1.2.3.4, 41.66.10.9" }, "10.0.0.1")).toBe("41.66.10.9");
++    expect(clientIpOf({ "x-forwarded-for": "1.2.3.4, 5.6.7.8, 41.66.10.9" }, "10.0.0.1")).toBe("41.66.10.9");
++  });
++
++  it("skips empty and malformed proxy entries", () => {
++    expect(clientIpOf({ "x-forwarded-for": "garbage, 41.66.10.9, " }, "10.0.0.1")).toBe("41.66.10.9");
++  });
++
++  it("strips the port a proxy may append", () => {
++    expect(clientIpOf({ "x-forwarded-for": "41.66.10.9:51234" }, "10.0.0.1")).toBe("41.66.10.9");
++  });
++
++  it("falls back to the socket address when no header is trustworthy", () => {
++    expect(clientIpOf({}, "10.0.0.1")).toBe("10.0.0.1");
++    expect(clientIpOf({ "x-real-ip": "41.66.10.9" }, "10.0.0.1")).toBe("41.66.10.9");
++  });
++});
++
++describe("CORS origin matching", () => {
++  const allowed = createOriginMatcher([
++    "https://attendance.example.com",
++    "https://lecturer.example.com/",
++    "https://*.vercel.app",
++  ]);
++
++  it("allows the listed web origins", () => {
++    expect(allowed("https://attendance.example.com")).toBe(true);
++    expect(allowed("https://lecturer.example.com")).toBe(true);
++    expect(allowed("https://ATTENDANCE.example.com")).toBe(true);
++  });
++
++  it("rejects every other web origin", () => {
++    expect(allowed("https://evil.example.com")).toBe(false);
++    expect(allowed("http://attendance.example.com")).toBe(false);
++    expect(allowed("https://attendance.example.com.evil.net")).toBe(false);
++    expect(allowed("null")).toBe(false);
++    expect(allowed("not a url")).toBe(false);
++  });
++
++  it("allows requests with no Origin header (Android app, curl, ESP32 nodes)", () => {
++    expect(allowed(undefined)).toBe(true);
++    expect(allowed("")).toBe(true);
++  });
++
++  it("supports wildcard sub-domains without matching look-alike hosts", () => {
++    expect(allowed("https://smart-attendance.vercel.app")).toBe(true);
++    expect(allowed("https://a.b.vercel.app")).toBe(false);
++    expect(allowed("https://vercel.app.evil.net")).toBe(false);
++  });
++
++  it("treats * as allow-all (development only)", () => {
++    const any = createOriginMatcher(["*"]);
++    expect(any("https://anything.example.com")).toBe(true);
++    expect(any(undefined)).toBe(true);
++  });
++});
++
++describe("origin normalisation", () => {
++  it("drops trailing slashes and lower-cases", () => {
++    expect(normalizeOrigin("https://App.Example.com/")).toBe("https://app.example.com");
++  });
++  it("rejects paths and non-http schemes", () => {
++    expect(normalizeOrigin("https://app.example.com/api")).toBe("https://app.example.com");
++    expect(normalizeOrigin("ftp://app.example.com")).toBeNull();
++    expect(normalizeOrigin("")).toBeNull();
++  });
++});
++
++describe("proxy and CORS configuration", () => {
++  const base = { DATABASE_URL: "postgres://x/y", JWT_SECRET: "s".repeat(40) };
++
++  it("defaults to trusting one proxy hop and Cloudflare's header", () => {
++    const cfg = loadConfig(base);
++    expect(cfg.TRUST_PROXY_HOPS).toBe(1);
++    expect(cfg.TRUST_CF_CONNECTING_IP).toBe(true);
++    expect(cfg.RATE_LIMIT_MAX).toBe(300);
++  });
++
++  it("refuses an explicit list that is not needed in production and wildcards", () => {
++    expect(() => loadConfig({ ...base, NODE_ENV: "production" })).toThrow(/CORS_ORIGINS/);
++    expect(() => loadConfig({ ...base, NODE_ENV: "production", CORS_ORIGINS: "*" })).toThrow(/CORS_ORIGINS/);
++  });
++
++  it("rejects origins with a path or query string", () => {
++    expect(() =>
++      loadConfig({ ...base, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.com/app" }),
++    ).toThrow(/bare origins/);
++    expect(() =>
++      loadConfig({ ...base, NODE_ENV: "production", CORS_ORIGINS: "https://app.example.com?x=1" }),
++    ).toThrow(/bare origins/);
++  });
++
++  it("accepts the real origin list", () => {
++    const cfg = loadConfig({
++      ...base,
++      NODE_ENV: "production",
++      CORS_ORIGINS: "https://attendance.example.com,https://lecturer.example.com",
++    });
++    expect(cfg.CORS_ORIGINS).toContain("attendance.example.com");
++    expect(cfg.NODE_ENV).toBe("production");
++  });
++});
