@@ -56,11 +56,15 @@ The APK is built by GitHub Actions (`.github/workflows/build-apk.yml`):
 1. Open the repo on GitHub → **Actions** → **Build APK** → **Run workflow**
    (or open a pull request — the workflow runs automatically).
 2. Wait for the run to finish (a few minutes).
-3. Open the finished run → **Artifacts** → download `smart-attendance-apk`
-   (contains `app-debug.apk`).
+3. Download `app-debug.apk` from the repository’s **latest release**, or open
+   the finished run → **Artifacts** → download `smart-attendance-apk`.
 
 Debug APKs are signed with the standard debug key and install directly on
 any Android 8.0+ phone.
+
+The `latest` release is updated automatically for successful runs on `main`
+and manual workflow runs. Pull requests only upload a temporary workflow
+artifact and do not publish a release.
 
 > If a run fails instantly with *"recent account payments have failed or
 > your spending limit needs to be increased"*, that is GitHub billing for

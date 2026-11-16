@@ -9,6 +9,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build native APK
@@ -69,3 +72,19 @@ jobs:
           name: smart-attendance-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Publish latest APK release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APK: android/app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          if gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload latest "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create latest "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Latest APK" \
+              --notes "Latest Smart Attendance APK built from ${GITHUB_SHA}."
+          fi
