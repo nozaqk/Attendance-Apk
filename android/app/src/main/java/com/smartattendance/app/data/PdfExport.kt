@@ -150,11 +150,11 @@ object PdfExport {
         doc.finishPage(pageInfo)
 
         val fileName = "my-${if (period == Period.WEEK) "weekly" else "monthly"}-activity-$to.pdf"
-        val bytes = doc.use { d ->
-            val out = java.io.ByteArrayOutputStream()
-            d.writeTo(out)
-            out.toByteArray()
-        }
+        // PdfDocument is not a Closeable in the Android stubs, so write and close explicitly.
+        val out = java.io.ByteArrayOutputStream()
+        doc.writeTo(out)
+        doc.close()
+        val bytes = out.toByteArray()
         saveToDownloads(context, fileName, bytes)
         return fileName
     }
