@@ -16,3 +16,9 @@ local.properties
 
 # Local APKs (download from GitHub Actions instead of committing binaries)
 *.apk
+
+# Signing material — never commit these
+*.jks
+*.keystore
+*.p12
+android/keystore.properties
