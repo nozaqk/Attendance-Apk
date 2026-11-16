@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Framework theme only (no AppCompat). Background matches the web app's
-         --bg (#f3f5f8) so there is no white flash; status bar matches the
+         background (#f3f5f8) so there is no white flash; status bar matches the
          web header navy (#12263f). In-app design is unchanged. -->
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/app_bg</item>
