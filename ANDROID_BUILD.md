@@ -111,15 +111,37 @@ first request after a sleep can take ~30–50 seconds while the server wakes,
 so an alert can arrive late even though the app polls on time. Opening the
 app (or any request) wakes the backend.
 
-## Release signing
+## Release builds
 
-Debug APKs are for installation and testing. For a production release:
+`BUILD_TYPE=release ./scripts/build-apk.sh` (or `cd android && ./gradlew assembleRelease`)
+builds the release variant. CI does the same in the **Build release APK (test)** job and
+uploads `smart-attendance-release-apk`; run it from *Actions → Build APK → Run workflow*.
 
-1. Generate a keystore: `keytool -genkey -v -keystore release.jks -alias attendance -keyalg RSA -keysize 2048 -validity 10000`
-2. Add a `signingConfigs.release` block in `app/build.gradle.kts` reading
-   the keystore path/passwords from environment variables or
-   `local.properties` (never commit the keystore or passwords).
-3. Run `./gradlew assembleRelease`.
+The release variant is currently **debug-signed**: no keystore is configured yet, so
+`android/app/build.gradle.kts` falls back to the debug key to keep the APK installable for
+testing. That APK is for testing only — a debug-signed build must not be distributed, and it
+cannot be updated later by a properly signed build with the same `applicationId`.
+
+### Adding the real keystore (later)
+
+1. Generate one (once, keep it safe — losing it means you can never update the app):
+   `keytool -genkeypair -v -keystore release.jks -alias attendance -keyalg RSA -keysize 2048 -validity 10000`
+2. Local builds: put the values in `android/local.properties`, which is git-ignored:
+   ```properties
+   KEYSTORE_FILE=release.jks          # relative to android/
+   KEYSTORE_PASSWORD=…
+   KEY_ALIAS=attendance
+   KEY_PASSWORD=…
+   ```
+3. CI: add repository secrets `KEYSTORE_BASE64` (`base64 -w0 release.jks`), `KEYSTORE_PASSWORD`,
+   `KEY_ALIAS`, `KEY_PASSWORD`, and add a "Restore keystore" step to the `release` job that
+   decodes `KEYSTORE_BASE64` into `$RUNNER_TEMP/release.jks` and exports `KEYSTORE_FILE`.
+
+No Gradle change is needed for either route: the signing config reads those variables and
+switches from the debug key to the real keystore automatically (the build log prints which one
+it used).
+
+Version numbers can be raised at build time: `./gradlew assembleRelease -PversionCode=2 -PversionName=1.1.0`.
 
 ## Troubleshooting
 
