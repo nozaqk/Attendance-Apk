@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  # Needed so a failed build can post its compiler output on the pull request.
+  pull-requests: write
 
 jobs:
   build:
