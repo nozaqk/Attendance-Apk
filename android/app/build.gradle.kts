@@ -1,3 +1,8 @@
+// Explicit imports: in a Gradle Kotlin script `java` already resolves to the Java plugin
+// extension, so `java.util.Properties` / `java.io.File` would not compile.
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -20,7 +25,7 @@ val apiBaseUrl: String = (
 // (environment variables for CI, or android/local.properties for local builds - both
 // git-ignored) to produce a properly signed release. A debug-signed APK must not be
 // distributed.
-val localProperties = java.util.Properties().apply {
+val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
@@ -57,7 +62,7 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = java.io.File(keystoreAbsolutePath!!)
+                storeFile = File(keystoreAbsolutePath!!)
                 storePassword = keystorePassword
                 keyAlias = keystoreAlias
                 keyPassword = keystoreKeyPassword
