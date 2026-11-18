@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "SmartAttendance"
+rootProject.name = "SmartIQ"
 include(":app")

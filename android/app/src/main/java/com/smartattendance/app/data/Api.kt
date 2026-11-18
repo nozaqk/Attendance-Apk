@@ -8,7 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Native API client for the Smart Attendance backend.
+ * Native API client for the SmartIQ backend.
  * Mirrors the web client's behaviour (src/shared/api.ts):
  * - JSON requests with `Authorization: Bearer <token>` when a token exists
  * - Errors surfaced as [ApiException] with the server's code/message

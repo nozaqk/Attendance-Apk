@@ -70,7 +70,7 @@ object NotifyHelper {
             Notification.Builder(context)
         }
         notification.setSmallIcon(R.drawable.ic_stat_notify)
-            .setContentTitle("Smart Attendance")
+            .setContentTitle("SmartIQ")
             .setContentText("Checking for class updates…")
             .setOngoing(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
