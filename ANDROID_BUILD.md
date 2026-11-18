@@ -157,20 +157,9 @@ Version numbers can be raised at build time: `./gradlew assembleRelease -Pversio
 
 ## Branding
 
-The launcher icon and the in-app logo come from `android/branding/`:
-
-| File | Use |
-| --- | --- |
-| `smartiq-logo.png` | the supplied source artwork (1254×1254, transparent) |
-| `smartiq-emblem.png` | emblem crop used for every generated asset (students, book, wifi) |
-| `play-store-icon-512.png` | 512×512 listing icon |
-
-Generated from the emblem: `res/mipmap-*/ic_launcher_foreground.png` (108dp adaptive
-canvas, emblem inside the safe zone), `res/mipmap-*/ic_launcher(.round).png` (white
-background, legacy launchers) and `res/drawable-nodpi/smartiq_emblem.png` (shown in the
-sign-in headers). The adaptive icon uses a white background (`@color/ic_launcher_background`).
-
-To swap the artwork later, replace `android/branding/smartiq-logo.png` and re-run the
-generation (Pillow): crop the emblem above the wordmark, keep components whose top edge is
-above `y≈780`, then render each density at 108dp (foreground, ratio 0.72) and 48dp (legacy,
-ratio 0.84).
+Launcher icon and in-app logo come from `android/branding/`: `smartiq-logo.png` is the source
+artwork, `smartiq-emblem.png` the cropped emblem (wordmark, tagline and the wifi marks removed),
+`play-store-icon-512.png` the listing icon. Everything under `res/mipmap-*` and
+`res/drawable-nodpi/smartiq_emblem.png` is generated - re-run
+`python3 android/branding/generate-icons.py` after replacing the artwork. See
+`android/branding/README.md` for the sizes and why 74% is used for the adaptive icon.
