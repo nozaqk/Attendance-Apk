@@ -360,7 +360,7 @@ fun BrandHeader(title: String, subtitle: String? = null) {
         Image(
             painter = painterResource(R.drawable.smartiq_emblem),
             contentDescription = null,
-            modifier = Modifier.size(width = 76.dp, height = 58.dp),
+            modifier = Modifier.size(width = 70.dp, height = 62.dp),
             contentScale = ContentScale.Fit
         )
         Column(
