@@ -97,9 +97,9 @@ fun LecturerLoginScreen(
                 catch (e: Exception) { err = e.message; busy = false }
             }
         })
-        TextAction("Forgot password?", onClick = onForgot)
+        TextAction("Forgot password?", modifier = Modifier.fillMaxWidth(), onClick = onForgot)
         DividerLine()
-        SecondaryButton("Choose role", onClick = onChooseRole)
+        SecondaryButton("Back", onClick = onChooseRole)
     }
 }
 
@@ -150,12 +150,12 @@ fun StudentLoginScreen(
                     catch (e: Exception) { err = e.message; busy = false }
                 }
             })
-            TextAction("Forgot password?", onClick = onForgot)
+            TextAction("Forgot password?", modifier = Modifier.fillMaxWidth(), onClick = onForgot)
             DividerLine()
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
             ) {
                 Text("New student?", color = Muted, fontSize = 14.sp)
                 TextAction("Create an account") { mode = "up"; err = null }
@@ -197,10 +197,10 @@ fun StudentLoginScreen(
                     } catch (e: Exception) { err = e.message; busy = false }
                 }
             })
-            TextAction("Already registered? Sign in") { mode = "in"; err = null }
+            TextAction("Already registered? Sign in", modifier = Modifier.fillMaxWidth()) { mode = "in"; err = null }
         }
         DividerLine()
-        SecondaryButton("Choose role", onClick = onChooseRole)
+        SecondaryButton("Back", onClick = onChooseRole)
     }
 }
 
@@ -318,10 +318,10 @@ fun ForgotPasswordScreen(api: ApiClient, onBackToLogin: () -> Unit) {
                     } catch (e: Exception) { err = e.message; busy = false }
                 }
             })
-            TextAction("No code? Send a new code") { scope.launch { sendCode() } }
+            TextAction("No code? Send a new code", modifier = Modifier.fillMaxWidth()) { scope.launch { sendCode() } }
         }
         DividerLine()
-        TextAction("Back to sign in", onClick = onBackToLogin)
+        TextAction("Back to sign in", modifier = Modifier.fillMaxWidth(), onClick = onBackToLogin)
     }
 }
 
@@ -363,6 +363,6 @@ fun ForcePasswordChangeScreen(
             }
         })
         DividerLine()
-        TextAction("Sign out", onClick = onLogout)
+        TextAction("Sign out", modifier = Modifier.fillMaxWidth(), onClick = onLogout)
     }
 }
