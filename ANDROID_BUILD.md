@@ -22,7 +22,7 @@ create an account — and each portal then operates separately:
   Class, Setting. Student: Home, Class, Course, Setting + Notifications).
 - A **← Choose role** link on the login screen switches portals.
 
-- App name: **Smart Attendance**
+- App name: **SmartIQ** (package `com.smartattendance.app` is unchanged so existing installs keep updating)
 - Package ID: `com.smartattendance.app`
 - Minimum Android: 8.0 (API 26); target/compile SDK 34
 - Backend: configured at build time, not hardcoded. `data/Api.kt` reads
@@ -90,7 +90,7 @@ Or open the `android/` folder in Android Studio and press **Run**.
 
 1. Copy the APK to the phone (USB, Drive, etc.) and open it.
 2. Allow "Install unknown apps" for the browser/file manager if prompted.
-3. Open **Smart Attendance**, choose **Lecturer** or **Student**, and sign
+3. Open **SmartIQ**, choose **Lecturer** or **Student**, and sign
    in (or create an account) with the same accounts as the web portals.
 
 ## Permissions (requested by the app)
@@ -145,7 +145,7 @@ Version numbers can be raised at build time: `./gradlew assembleRelease -Pversio
 
 ## Troubleshooting
 
-- **"Bluetooth verification needs the Smart Attendance Android app"**:
+- **"Bluetooth verification needs the SmartIQ Android app"**:
   that message only appears in a mobile browser. Use the installed app.
 - **Node never detected**: check Bluetooth is on, permissions are granted,
   and (Android 11 and older) Location is on. The ESP32 node must be
@@ -154,3 +154,23 @@ Version numbers can be raised at build time: `./gradlew assembleRelease -Pversio
   app from battery optimisation in system settings.
 - **Gradle can't resolve dependencies offline**: the first build needs
   internet access to `dl.google.com` / Maven Central.
+
+## Branding
+
+The launcher icon and the in-app logo come from `android/branding/`:
+
+| File | Use |
+| --- | --- |
+| `smartiq-logo.png` | the supplied source artwork (1254×1254, transparent) |
+| `smartiq-emblem.png` | emblem crop used for every generated asset (students, book, wifi) |
+| `play-store-icon-512.png` | 512×512 listing icon |
+
+Generated from the emblem: `res/mipmap-*/ic_launcher_foreground.png` (108dp adaptive
+canvas, emblem inside the safe zone), `res/mipmap-*/ic_launcher(.round).png` (white
+background, legacy launchers) and `res/drawable-nodpi/smartiq_emblem.png` (shown in the
+sign-in headers). The adaptive icon uses a white background (`@color/ic_launcher_background`).
+
+To swap the artwork later, replace `android/branding/smartiq-logo.png` and re-run the
+generation (Pillow): crop the emblem above the wordmark, keep components whose top edge is
+above `y≈780`, then render each density at 108dp (foreground, ratio 0.72) and 48dp (legacy,
+ratio 0.84).

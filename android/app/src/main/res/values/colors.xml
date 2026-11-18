@@ -6,4 +6,5 @@
     <color name="line">#dde3ea</color>
     <color name="muted">#5d6b7c</color>
     <color name="text">#1b2430</color>
+    <color name="ic_launcher_background">#ffffff</color>
 </resources>

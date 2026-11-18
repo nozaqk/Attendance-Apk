@@ -1,6 +1,7 @@
 package com.smartattendance.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.smartattendance.app.R
 
 enum class Tone { GREEN, YELLOW, RED, GREY, BLUE }
 
@@ -353,20 +357,17 @@ fun BrandHeader(title: String, subtitle: String? = null) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(BlueBg),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("📡", fontSize = 26.sp)
-        }
+        Image(
+            painter = painterResource(R.drawable.smartiq_emblem),
+            contentDescription = null,
+            modifier = Modifier.size(width = 76.dp, height = 58.dp),
+            contentScale = ContentScale.Fit
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("Smart Attendance", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Navy)
+            Text("SmartIQ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Navy)
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Muted)
             if (subtitle != null) {
                 Text(

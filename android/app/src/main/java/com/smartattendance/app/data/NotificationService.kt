@@ -76,7 +76,7 @@ class NotificationService : Service() {
                         NotifyHelper.show(
                             this,
                             id,
-                            item.optString("title", "Smart Attendance"),
+                            item.optString("title", "SmartIQ"),
                             item.optString("body", "")
                         )
                         seen.add(id)
