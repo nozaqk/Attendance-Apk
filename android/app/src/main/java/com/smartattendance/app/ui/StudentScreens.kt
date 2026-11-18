@@ -64,6 +64,7 @@ fun StudentShell(
     api: ApiClient,
     user: User,
     scanner: BleScanner,
+    openNotificationsTick: Int = 0,
     onRequestBlePermissions: () -> Unit,
     onRefreshUser: () -> Unit,
     onLogout: () -> Unit
@@ -72,44 +73,61 @@ fun StudentShell(
     var showNotifs by remember { mutableStateOf(false) }
     val ready = user.semester != null && user.departmentId != null
 
-    // In-app notification polling (15s) — mirrors web useNotificationPolling.
+    // Opened from a notification tap: show the feed.
+    LaunchedEffect(openNotificationsTick) {
+        if (openNotificationsTick > 0) showNotifs = true
+    }
+
+    // Fallback while the app is in the foreground and the background service could not
+    // run (notification permission denied, OEM killed it). Both paths share the seen-id
+    // set, so an alert is never shown twice.
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("notified", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(NotificationService.PREFS, Context.MODE_PRIVATE)
         while (true) {
-            try {
-                val res = api.get("/api/student/notifications")
-                val seen = prefs.getStringSet("seen", emptySet())?.toMutableSet() ?: mutableSetOf()
-                val arr = res.optJSONArray("items")
-                var changed = false
-                if (arr != null) for (i in 0 until arr.length()) {
-                    val n = arr.optJSONObject(i) ?: continue
-                    val id = n.optString("id")
-                    if (!n.optBoolean("read", false) && !seen.contains(id)) {
-                        NotifyHelper.show(context, id, n.optString("title"), n.optString("body"))
-                        seen.add(id)
-                        changed = true
+            if (!NotificationService.isRunning) {
+                try {
+                    val res = api.get("/api/student/notifications")
+                    val seen = prefs.getStringSet(NotificationService.KEY_SEEN, emptySet())
+                        ?.toMutableSet() ?: mutableSetOf()
+                    val arr = res.optJSONArray("items")
+                    var changed = false
+                    if (arr != null) for (i in 0 until arr.length()) {
+                        val n = arr.optJSONObject(i) ?: continue
+                        val id = n.optString("id")
+                        if (!n.optBoolean("read", false) && !seen.contains(id)) {
+                            NotifyHelper.show(context, id, n.optString("title"), n.optString("body"))
+                            seen.add(id)
+                            changed = true
+                        }
                     }
-                }
-                if (changed) prefs.edit().putStringSet("seen", seen.toList().takeLast(200).toSet()).apply()
-            } catch (_: Exception) {}
+                    if (changed) {
+                        prefs.edit()
+                            .putStringSet(
+                                NotificationService.KEY_SEEN,
+                                seen.toList().takeLast(NotificationService.MAX_SEEN).toSet()
+                            )
+                            .apply()
+                    }
+                } catch (_: Exception) {}
+            }
             delay(15_000)
         }
     }
 
-    // Background notifications while the app is closed (student only).
+    // Background alerts: (re)issue the restricted device token, then make sure the
+    // foreground service is polling. Runs on every student session, so a reinstall,
+    // reboot or expired token heals as soon as the app is opened.
     LaunchedEffect(Unit) {
         try {
             val tokenRes = api.post("/api/student/notifications/device-token")
             val deviceToken = tokenRes.optString("token")
-            if (deviceToken.isNotEmpty() && !NotificationService.isRunning) {
-                val prefs = context.getSharedPreferences(NotificationService.PREFS, Context.MODE_PRIVATE)
-                prefs.edit()
+            if (deviceToken.isNotEmpty()) {
+                context.getSharedPreferences(NotificationService.PREFS, Context.MODE_PRIVATE)
+                    .edit()
                     .putString(NotificationService.KEY_API_BASE, ApiClient.BASE)
                     .putString(NotificationService.KEY_DEVICE_TOKEN, deviceToken)
                     .apply()
-                val intent = Intent(context, NotificationService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-                else context.startService(intent)
+                NotificationService.ensureRunning(context)
             }
         } catch (_: Exception) {}
     }

@@ -25,6 +25,7 @@ import com.smartattendance.app.data.ApiClient
 import com.smartattendance.app.data.AuthStore
 import com.smartattendance.app.data.BleScanner
 import com.smartattendance.app.data.NotificationService
+import com.smartattendance.app.data.NotifyHelper
 import com.smartattendance.app.data.User
 import com.smartattendance.app.ui.AppTheme
 import com.smartattendance.app.ui.ForgotPasswordScreen
@@ -44,6 +45,12 @@ import kotlinx.coroutines.launch
  * Bluetooth verification, notifications and PDF export are all native.
  */
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Bumped whenever the activity is opened from a notification, so the student shell
+     * can jump to the notifications feed (cold start and taps while it is already open).
+     */
+    private var notificationTick by mutableStateOf(0)
 
     private val blePermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -70,6 +77,10 @@ class MainActivity : ComponentActivity() {
         ) {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        if (intent?.getBooleanExtra(NotifyHelper.EXTRA_OPEN_NOTIFICATIONS, false) == true) {
+            notificationTick = 1
+        }
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -84,6 +95,14 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(NotifyHelper.EXTRA_OPEN_NOTIFICATIONS, false)) {
+            notificationTick += 1
         }
     }
 
@@ -217,9 +236,8 @@ class MainActivity : ComponentActivity() {
                 try { api.post("/api/auth/logout") } catch (_: Exception) {}
                 store.setToken(null)
                 user = null
-                try {
-                    stopService(Intent(this@MainActivity, NotificationService::class.java))
-                } catch (_: Exception) {}
+                // Also stops background polling and revokes the restricted feed token.
+                NotificationService.stopAndForget(this@MainActivity)
             }
         }
 
@@ -253,6 +271,7 @@ class MainActivity : ComponentActivity() {
             api = api,
             user = u,
             scanner = scanner,
+            openNotificationsTick = notificationTick,
             onRequestBlePermissions = onRequestBlePermissions,
             onRefreshUser = { scope.launch { refresh() } },
             onLogout = { logout() }

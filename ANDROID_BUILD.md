@@ -155,6 +155,41 @@ Version numbers can be raised at build time: `./gradlew assembleRelease -Pversio
 - **Gradle can't resolve dependencies offline**: the first build needs
   internet access to `dl.google.com` / Maven Central.
 
+## Background notifications (student portal)
+
+Alerts keep arriving while the app is closed, the screen is off, or the phone has been
+restarted:
+
+1. On every student session the app calls `POST /api/student/notifications/device-token`
+   and stores the restricted 90-day token (`SharedPreferences` file `bg_session`).
+2. `NotificationService` (foreground service, `dataSync`, `START_STICKY`) polls
+   `GET /api/student/notifications/feed` every 30 s with that token and posts a notification
+   per new unread item. The persistent "Checking for class updates…" notification is what
+   Android requires for a foreground service.
+3. `BootReceiver` restarts the service after `BOOT_COMPLETED` / app update, so a reboot does
+   not silence alerts.
+4. Tapping an alert opens the app on the notifications tab.
+5. Signing out stops the service, deletes the stored token and revokes it server-side
+   (`DELETE /api/student/notifications/feed`).
+
+Notes:
+- `/api/student/notifications` **rejects** the restricted token (it is not a session token);
+  only `/notifications/feed` accepts it. That mismatch is why alerts used to be silent.
+- Android 13+ needs the `POST_NOTIFICATIONS` runtime permission; the app asks on first launch.
+  If it is denied the foreground service still runs, but nothing is displayed.
+- Aggressive battery managers (Xiaomi, Oppo, vivo) may still kill the service; the manifest
+  already declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and exempting SmartIQ in
+  Settings → Apps → Battery keeps alerts reliable.
+- Lecturer accounts have no background feed on the server; this covers the student portal.
+
+Verify on a device:
+
+```bash
+adb shell dumpsys activity services com.smartattendance.app | grep NotificationService
+# close the app, then create an alert (QA/lecturer starts a class) and wait <=30 s
+adb shell cmd notification post -S bigtext -t test test "hello"   # sanity check the channel
+```
+
 ## Branding
 
 Launcher icon and in-app logo come from `android/branding/`: `smartiq-logo.png` is the source
