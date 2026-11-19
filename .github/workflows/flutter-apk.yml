@@ -32,9 +32,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Flutter is pinned: 3.27.x is the release that pairs with the Gradle
+      # 8.7 / AGP 8.5 / Kotlin 1.9 toolchain in mobile/android. Flutter stable
+      # now ships AGP 9 + Gradle 9.5, which needs a different Android host.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.27.1
           channel: stable
           cache: true
 
