@@ -64,24 +64,48 @@ jobs:
           flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL" 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
 
-      # Run logs are not always downloadable from tooling, so the exact compiler
-      # output is also posted on the pull request.
+      # Run logs are not always downloadable from tooling, so diagnostics are
+      # published as check annotations (readable through the API) and, for pull
+      # requests, as a comment.
+      - name: Publish analyzer diagnostics
+        if: failure()
+        working-directory: mobile
+        run: |
+          [ -f analyze.log ] || exit 0
+          grep -E "^\s*(error|warning)\s+•" analyze.log | head -40 | while IFS= read -r line; do
+            echo "::error title=flutter analyze::${line//'%'/'%25'}"
+          done
+          grep -E "^e: |Error: " analyze.log | head -20 | while IFS= read -r line; do
+            echo "::error title=flutter analyze::${line//'%'/'%25'}"
+          done
+
+      - name: Publish build diagnostics
+        if: failure()
+        working-directory: mobile
+        run: |
+          [ -f build.log ] || exit 0
+          grep -E "^e: |error:|Error:|FAILURE:|What went wrong|Execution failed" build.log | head -40 | while IFS= read -r line; do
+            echo "::error title=flutter build::${line//'%'/'%25'}"
+          done
+
       - name: Report failures on the pull request
-        if: failure() && github.event_name == 'pull_request'
+        if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          [ -n "$PR_NUMBER" ] || exit 0
           {
             echo '### Flutter build failed'
             echo '```'
             for log in mobile/analyze.log mobile/build.log; do
               [ -f "$log" ] || continue
-              grep -E "^e: |error:|Error:|What went wrong|FAILURE:|Execution failed|Cannot|not found|undefined" -m 120 "$log" || tail -n 60 "$log"
+              grep -E "^\s*(error|warning)\s+•|^e: |error:|Error:|What went wrong|FAILURE:" -m 120 "$log" || tail -n 60 "$log"
             done
             echo '```'
           } > /tmp/report.md
           head -c 60000 /tmp/report.md > /tmp/report.trim.md
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/report.trim.md || true
+          gh pr comment "$PR_NUMBER" --body-file /tmp/report.trim.md || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
