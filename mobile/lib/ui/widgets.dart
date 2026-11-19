@@ -109,8 +109,15 @@ class AppCard extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.lineSoft),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 18,
+            offset: Offset(0, 5),
+          ),
+        ],
       ),
       padding: contentPadding,
       child: Column(
@@ -566,19 +573,19 @@ class _AuthFieldState extends State<AuthField> {
         fillColor: AppColors.cardWhite,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.navy, width: 1.4),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
         ),
         disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.line),
         ),
         suffixIcon: widget.isPassword
@@ -820,7 +827,7 @@ class CountsHead extends StatelessWidget {
   }
 }
 
-/// Bottom navigation bar: emoji icon + 11pt label, navy when selected.
+/// Bottom navigation bar: familiar emoji icons with a clearer selected state.
 class AppBottomBar extends StatelessWidget {
   const AppBottomBar({
     super.key,
@@ -846,25 +853,42 @@ class AppBottomBar extends StatelessWidget {
           children: <Widget>[
             for (int i = 0; i < items.length; i++)
               Expanded(
-                child: InkWell(
+                child: Semantics(
+                  button: true,
+                  selected: i == index,
+                  excludeSemantics: true,
+                  label: items[i].label,
                   onTap: () => onSelect(i),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Text(items[i].icon, style: const TextStyle(fontSize: 20)),
-                        const SizedBox(height: 2),
-                        Text(
-                          items[i].label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: i == index ? AppColors.navy : AppColors.muted,
-                            fontWeight:
-                                i == index ? FontWeight.w600 : FontWeight.normal,
+                  child: InkWell(
+                    onTap: () => onSelect(i),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(3, 7, 3, 6),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: i == index ? AppColors.blueBg : Colors.transparent,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(items[i].icon, style: const TextStyle(fontSize: 19)),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          Text(
+                            items[i].label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: i == index ? AppColors.navy : AppColors.muted,
+                              fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

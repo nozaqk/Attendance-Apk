@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// The web palette (`src/shared/styles.css`) reused so the Flutter build looks
-/// exactly like the web app and like the previous native build.
+/// SmartIQ's refined navy-and-blue design system. The palette stays true to the
+/// original app while using clearer surfaces, softer borders and stronger
+/// interaction states throughout the Flutter experience.
 class AppColors {
   const AppColors._();
 
@@ -23,6 +24,9 @@ class AppColors {
   static const Color greyBg = Color(0xFFE9EDF2);
   static const Color selectedTile = Color(0xFFF1F5FB);
   static const Color navyDisabled = Color(0xFF9AA7B5);
+  static const Color lineSoft = Color(0xD1DDE3EA);
+  static const Color blueBgSoft = Color(0x94E5EDFF);
+  static const Color shadow = Color(0x1012263F);
 }
 
 ThemeData buildAppTheme() {
@@ -48,11 +52,57 @@ ThemeData buildAppTheme() {
       bodyColor: AppColors.textDark,
       displayColor: AppColors.textDark,
       fontSizeFactor: 1.0,
+    ).copyWith(
+      headlineMedium: base.textTheme.headlineMedium?.copyWith(
+        color: AppColors.textDark,
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        letterSpacing: -0.4,
+      ),
+      titleLarge: base.textTheme.titleLarge?.copyWith(
+        color: AppColors.textDark,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+      ),
+      bodyMedium: base.textTheme.bodyMedium?.copyWith(
+        color: AppColors.textDark,
+        fontSize: 14,
+        height: 1.4,
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: AppColors.cardWhite,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      labelStyle: const TextStyle(color: AppColors.muted, fontSize: 14),
+      floatingLabelStyle: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w600),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.red, width: 1.5),
+      ),
     ),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: AppColors.navy,
       contentTextStyle: TextStyle(color: Colors.white, fontSize: 14),
       behavior: SnackBarBehavior.floating,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.navy,
+      linearTrackColor: AppColors.blueBg,
     ),
   );
 }
