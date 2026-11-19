@@ -16,7 +16,8 @@ on:
       - ".github/workflows/flutter-apk.yml"
 
 permissions:
-  contents: read
+  # write, so a main build can publish the APK to a release
+  contents: write
   pull-requests: write
 
 jobs:
@@ -32,11 +33,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Flutter is pinned: 3.27.x is the release that pairs with the Gradle
+      # 8.7 / AGP 8.5 / Kotlin 1.9 toolchain in mobile/android. Flutter stable
+      # now ships AGP 9 + Gradle 9.5, which needs a different Android host.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: "3.27.1"
           cache: true
+
+      - name: Show Flutter and Dart versions
+        run: flutter --version
 
       - name: Resolve dependencies
         working-directory: mobile
@@ -84,8 +91,12 @@ jobs:
         working-directory: mobile
         run: |
           [ -f build.log ] || exit 0
-          grep -E "^e: |error:|Error:|FAILURE:|What went wrong|Execution failed" build.log | head -40 | while IFS= read -r line; do
+          grep -E "^e: |error:|Error:|FAILURE:|What went wrong|Execution failed|Caused by|Could not|OutOfMemory|> Task .*FAILED" build.log \
+            | head -40 | while IFS= read -r line; do
             echo "::error title=flutter build::${line//'%'/'%25'}"
+          done
+          tail -n 15 build.log | while IFS= read -r line; do
+            echo "::error title=flutter build tail::${line//'%'/'%25'}"
           done
 
       - name: Report failures on the pull request
@@ -100,7 +111,7 @@ jobs:
             echo '```'
             for log in mobile/analyze.log mobile/build.log; do
               [ -f "$log" ] || continue
-              grep -E "^\s*(error|warning)\s+•|^e: |error:|Error:|What went wrong|FAILURE:" -m 120 "$log" || tail -n 60 "$log"
+              grep -E -A2 "^\s*error\s+•|^e: |error:|Error:|What went wrong|Execution failed|Caused by|Could not|OutOfMemory" -m 120 "$log" || tail -n 60 "$log"
             done
             echo '```'
           } > /tmp/report.md
@@ -113,3 +124,22 @@ jobs:
           name: smartiq-flutter-apk
           path: mobile/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
+
+      # A stable download link for testing on a phone. Debug-signed and named
+      # apart from the Kotlin build's `latest` release, so the two never clobber
+      # each other.
+      - name: Publish APK to the flutter-latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APK: mobile/build/app/outputs/flutter-apk/app-debug.apk
+        run: |
+          if gh release view flutter-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload flutter-latest "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create flutter-latest "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "SmartIQ - Flutter APK" \
+              --notes "Latest Dart/Flutter build of SmartIQ (both portals). Debug-signed: installable for testing, not for distribution."
+          fi

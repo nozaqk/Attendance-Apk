@@ -61,8 +61,15 @@ Everything else — including the tap-to-open-feed behaviour — is Dart.
 
 ## Build
 
+Requires **Flutter 3.27.x** (Dart 3.6). That release pairs with the toolchain in
+`mobile/android` — Gradle 8.7, AGP 8.5.2, Kotlin 1.9.24. Flutter stable has since
+moved to AGP 9.3.1 / Gradle 9.5, which needs a migrated Android host (its template
+also turns off `android.newDsl` and `android.builtInKotlin` and drops the
+`kotlin-android` plugin), so CI pins 3.27.1 rather than drifting.
+
 ```bash
 cd mobile
+flutter --version   # 3.27.x
 flutter pub get
 
 # debug APK against the Render host
@@ -73,7 +80,9 @@ flutter build apk --release --dart-define=API_BASE_URL=https://your-domain
 ```
 
 CI: `.github/workflows/flutter-apk.yml` runs `pub get`, `flutter analyze`,
-`flutter test` and `flutter build apk`, then uploads the APK artifact. Set the
+`flutter test` and `flutter build apk`, uploads the APK artifact and, on `main`,
+publishes it to the **`flutter-latest`** release for easy download (the Kotlin
+build keeps its own `latest` release). Set the
 repository **variable** `API_BASE_URL` (Settings → Secrets and variables →
 Actions → Variables) to build against another origin.
 
