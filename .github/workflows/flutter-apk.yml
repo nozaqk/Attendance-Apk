@@ -1,0 +1,91 @@
+name: Build Flutter APK
+
+# Builds the Dart/Flutter app in mobile/ — the same product and design as the
+# Kotlin build, written in Dart. The Kotlin workflow (build-apk.yml) is kept so
+# the previous build stays reproducible while the two are compared.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/flutter-apk.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/flutter-apk.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build Dart APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      # Errors fail the build; style hints are reported but do not block.
+      - name: Analyze
+        working-directory: mobile
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee analyze.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Unit tests
+        working-directory: mobile
+        run: flutter test
+
+      - name: Build debug APK
+        working-directory: mobile
+        env:
+          # Repository variable: Settings -> Secrets and variables -> Actions -> Variables
+          # API_BASE_URL = https://your-domain  (public value, not a secret)
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://attendance-system-33pl.onrender.com' }}
+        run: |
+          echo "Building APK against API_BASE_URL=$API_BASE_URL"
+          flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL" 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
+
+      # Run logs are not always downloadable from tooling, so the exact compiler
+      # output is also posted on the pull request.
+      - name: Report failures on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo '### Flutter build failed'
+            echo '```'
+            for log in mobile/analyze.log mobile/build.log; do
+              [ -f "$log" ] || continue
+              grep -E "^e: |error:|Error:|What went wrong|FAILURE:|Execution failed|Cannot|not found|undefined" -m 120 "$log" || tail -n 60 "$log"
+            done
+            echo '```'
+          } > /tmp/report.md
+          head -c 60000 /tmp/report.md > /tmp/report.trim.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/report.trim.md || true
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartiq-flutter-apk
+          path: mobile/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error

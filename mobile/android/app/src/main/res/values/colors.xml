@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="navy">#12263f</color>
+    <color name="app_bg">#f3f5f8</color>
+    <color name="check_green">#4ade80</color>
+    <color name="line">#dde3ea</color>
+    <color name="muted">#5d6b7c</color>
+    <color name="text">#1b2430</color>
+    <color name="ic_launcher_background">#ffffff</color>
+</resources>
