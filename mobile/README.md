@@ -1,11 +1,15 @@
 # SmartIQ — Flutter (Dart) app
 
-This is the app rebuilt in **Dart/Flutter**: the same product, the same design and
-the same behaviour as the Kotlin/Compose build in `../android`, written in Dart.
-One APK, both portals (Lecturer and Student), same backend.
+SmartIQ's attendance app, written entirely in **Dart** with Flutter. One APK, both
+portals (Lecturer and Student), one backend.
+
+It was rebuilt from the Kotlin/Compose app and the web front ends that still live
+in the original repository; the screens, palette, spacing, copy and behaviour are
+the same. This repository is only the app — history before the port is in that
+other repository.
 
 ```
-mobile/
+.
 ├── lib/                     the whole app: screens, state, API, models, BLE logic, PDF content
 │   ├── main.dart            launch, role picker, session gates
 │   ├── config.dart          API_BASE_URL from --dart-define
