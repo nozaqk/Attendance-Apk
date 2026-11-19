@@ -49,6 +49,20 @@ class _LecturerShellState extends State<LecturerShell> {
   @override
   Widget build(BuildContext context) {
     final user = widget.session.user;
+    if (user == null) {
+      // The gate only builds the shell for a signed-in lecturer; this covers the
+      // instant between a session expiring and the gate rebuilding.
+      return const Scaffold(
+        backgroundColor: AppColors.appBg,
+        body: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.navy),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.appBg,
       body: SafeArea(
