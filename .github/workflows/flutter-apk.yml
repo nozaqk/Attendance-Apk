@@ -38,9 +38,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.27.1
-          channel: stable
+          flutter-version: "3.27.1"
           cache: true
+
+      - name: Show Flutter and Dart versions
+        run: flutter --version
 
       - name: Resolve dependencies
         working-directory: mobile
