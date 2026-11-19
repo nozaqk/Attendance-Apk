@@ -1,0 +1,27 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# IDE
+.idea/
+.vscode/
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/release/
+android/app/debug/
+*.jks
+*.keystore
+key.properties
+
+# Logs the CI writes
+analyze.log
+build.log
+
+# OS
+.DS_Store
