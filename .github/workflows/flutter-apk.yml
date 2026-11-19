@@ -1,10 +1,13 @@
 name: Build Flutter APK
 
-# Builds the Dart/Flutter app in mobile/ — the same product and design as the
-# Kotlin build, written in Dart. The Kotlin workflow (build-apk.yml) is kept so
-# the previous build stays reproducible while the two are compared.
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish this build as a downloadable GitHub prerelease
+        required: true
+        default: true
+        type: boolean
   push:
     branches: [main]
     paths:
@@ -16,13 +19,11 @@ on:
       - ".github/workflows/flutter-apk.yml"
 
 permissions:
-  # write, so a main build can publish the APK to a release
   contents: write
-  pull-requests: write
 
 jobs:
   build:
-    name: Build Dart APK
+    name: Analyze, test and build Dart app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,119 +34,51 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Flutter is pinned: 3.27.x is the release that pairs with the Gradle
-      # 8.7 / AGP 8.5 / Kotlin 1.9 toolchain in mobile/android. Flutter stable
-      # now ships AGP 9 + Gradle 9.5, which needs a different Android host.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.27.1"
           cache: true
 
-      - name: Show Flutter and Dart versions
-        run: flutter --version
-
       - name: Resolve dependencies
         working-directory: mobile
         run: flutter pub get
 
-      # Errors fail the build; style hints are reported but do not block.
-      - name: Analyze
+      - name: Analyze Dart
         working-directory: mobile
-        run: |
-          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee analyze.log
-          exit ${PIPESTATUS[0]}
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - name: Unit tests
+      - name: Run Dart tests
         working-directory: mobile
         run: flutter test
 
       - name: Build release APK
         working-directory: mobile
         env:
-          # Repository variable: Settings -> Secrets and variables -> Actions -> Variables
-          # API_BASE_URL = https://your-domain  (public value, not a secret)
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://attendance-system-33pl.onrender.com' }}
-        run: |
-          echo "Building APK against API_BASE_URL=$API_BASE_URL"
-          flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL" 2>&1 | tee build.log
-          exit ${PIPESTATUS[0]}
+        run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
 
-      # Run logs are not always downloadable from tooling, so diagnostics are
-      # published as check annotations (readable through the API) and, for pull
-      # requests, as a comment.
-      - name: Publish analyzer diagnostics
-        if: failure()
-        working-directory: mobile
-        run: |
-          [ -f analyze.log ] || exit 0
-          grep -E "^\s*(error|warning)\s+•" analyze.log | head -40 | while IFS= read -r line; do
-            echo "::error title=flutter analyze::${line//'%'/'%25'}"
-          done
-          grep -E "^e: |Error: " analyze.log | head -20 | while IFS= read -r line; do
-            echo "::error title=flutter analyze::${line//'%'/'%25'}"
-          done
-
-      - name: Publish build diagnostics
-        if: failure()
-        working-directory: mobile
-        run: |
-          [ -f build.log ] || exit 0
-          grep -E "^e: |error:|Error:|FAILURE:|What went wrong|Execution failed|Caused by|Could not|OutOfMemory|> Task .*FAILED" build.log \
-            | head -40 | while IFS= read -r line; do
-            echo "::error title=flutter build::${line//'%'/'%25'}"
-          done
-          tail -n 15 build.log | while IFS= read -r line; do
-            echo "::error title=flutter build tail::${line//'%'/'%25'}"
-          done
-
-      - name: Report failures on the pull request
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          [ -n "$PR_NUMBER" ] || exit 0
-          {
-            echo '### Flutter build failed'
-            echo '```'
-            for log in mobile/analyze.log mobile/build.log; do
-              [ -f "$log" ] || continue
-              grep -E -A2 "^\s*error\s+•|^e: |error:|Error:|What went wrong|Execution failed|Caused by|Could not|OutOfMemory" -m 120 "$log" || tail -n 60 "$log"
-            done
-            echo '```'
-          } > /tmp/report.md
-          head -c 60000 /tmp/report.md > /tmp/report.trim.md
-          gh pr comment "$PR_NUMBER" --body-file /tmp/report.trim.md || true
-
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: smartiq-flutter-apk
-          path: mobile/build/app/outputs/flutter-apk/*.apk
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-      # One release, one APK: this is the product. Every main build replaces the
-      # release's whole asset list, so `latest` can never accumulate stale builds
-      # (the old Kotlin APK included).
-      - name: Publish the single latest APK
+      - name: Publish latest APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APK: mobile/build/app/outputs/flutter-apk/app-release.apk
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cp "$APK" smartiq-latest.apk
-          NOTES="The one installable SmartIQ APK - both portals, built from ${GITHUB_SHA:0:7} with Flutter $(flutter --version | head -1 | cut -d' ' -f2). Signed with the debug key: installs on any phone, not for store distribution."
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk smartiq-latest.apk
+          NOTES="SmartIQ Flutter app built from ${GITHUB_SHA:0:7}. This test build is signed with the debug key and is not intended for store distribution."
           if gh release view latest --repo "$REPO" >/dev/null 2>&1; then
-            # Upload first: a failed upload must never leave the release empty.
             gh release upload latest smartiq-latest.apk --repo "$REPO" --clobber
-            # Then drop every other asset (the old Kotlin app-debug.apk included),
-            # so exactly one APK remains.
             gh release view latest --repo "$REPO" --json assets --jq '.assets[].name' |
               while IFS= read -r name; do
-                if [ -n "$name" ] && [ "$name" != "smartiq-latest.apk" ]; then
+                if [[ -n "$name" && "$name" != "smartiq-latest.apk" ]]; then
                   gh release delete-asset latest "$name" --repo "$REPO" --yes
                 fi
               done
@@ -157,4 +90,20 @@ jobs:
               --title "SmartIQ - latest APK" \
               --notes "$NOTES"
           fi
-          echo "Released $(du -h smartiq-latest.apk | cut -f1) as the only asset of 'latest'."
+
+      - name: Publish branch build as a downloadable prerelease
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="smartiq-${GITHUB_SHA:0:7}"
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk smartiq.apk
+          NOTES="Installable SmartIQ Android test build from branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA}. Both lecturer and student portals are included. This APK is debug-signed and is not for Play Store distribution. Download smartiq.apk, allow installs from your browser or file manager, then open it to install."
+          gh release create "$TAG" smartiq.apk \
+            --repo "$REPO" \
+            --target "$GITHUB_SHA" \
+            --title "SmartIQ APK ($TAG)" \
+            --notes "$NOTES" \
+            --prerelease
