@@ -1,5 +1,11 @@
 # Android APK (Lecturer + Student in one native app)
 
+> **Flutter rebuild.** The same product is also implemented in Dart/Flutter under
+> [`mobile/`](mobile/README.md): identical design and features, one APK with both
+> portals, built by the `Build Flutter APK` workflow. This document still describes
+> the Kotlin/Compose build in `android/`.
+
+
 This repo contains two web apps and **one native Android app**:
 
 | Portal | Web source (unchanged) | Native screen code |
