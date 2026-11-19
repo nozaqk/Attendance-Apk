@@ -1,0 +1,32 @@
+name: smartiq
+description: SmartIQ - one Flutter app for lecturers and students (class sessions, Bluetooth attendance verification, class alerts).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+# Only stable, widely-used packages: the whole product (screens, navigation,
+# state, API, polling, PDF layout, formatting) is plain Dart. Three OS-level
+# capabilities are delegated to the Android host through a small bridge
+# (lib/platform/native.dart + android/.../MainActivity.kt):
+#   * Bluetooth LE scanning        (needs the Android BLE stack)
+#   * closed-app notification poll (needs a foreground service)
+#   * writing a PDF into Downloads (needs MediaStore)
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  intl: ^0.19.0
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/smartiq_emblem.png
