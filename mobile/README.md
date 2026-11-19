@@ -75,14 +75,19 @@ flutter pub get
 # debug APK against the Render host
 flutter build apk --debug
 
+# the build that ships: release, signed with the debug key for now
+flutter build apk --release
+
 # point at a custom domain (one flag, no code changes)
 flutter build apk --release --dart-define=API_BASE_URL=https://your-domain
 ```
 
 CI: `.github/workflows/flutter-apk.yml` runs `pub get`, `flutter analyze`,
-`flutter test` and `flutter build apk`, uploads the APK artifact and, on `main`,
-publishes it to the **`flutter-latest`** release for easy download (the Kotlin
-build keeps its own `latest` release). Set the
+`flutter test` and `flutter build apk --release`, uploads the APK artifact and,
+on `main`, publishes it as **the only asset of the `latest` release**
+(`smartiq-latest.apk`). Every main build clears that release's assets first, so
+there is exactly one APK to install and it is always this app. The Kotlin build
+in `android/` still compiles as a check but no longer publishes anything. Set the
 repository **variable** `API_BASE_URL` (Settings → Secrets and variables →
 Actions → Variables) to build against another origin.
 

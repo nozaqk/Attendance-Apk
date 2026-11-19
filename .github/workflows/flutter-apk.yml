@@ -60,7 +60,7 @@ jobs:
         working-directory: mobile
         run: flutter test
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: mobile
         env:
           # Repository variable: Settings -> Secrets and variables -> Actions -> Variables
@@ -68,7 +68,7 @@ jobs:
           API_BASE_URL: ${{ vars.API_BASE_URL || 'https://attendance-system-33pl.onrender.com' }}
         run: |
           echo "Building APK against API_BASE_URL=$API_BASE_URL"
-          flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL" 2>&1 | tee build.log
+          flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL" 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
 
       # Run logs are not always downloadable from tooling, so diagnostics are
@@ -125,21 +125,36 @@ jobs:
           path: mobile/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
 
-      # A stable download link for testing on a phone. Debug-signed and named
-      # apart from the Kotlin build's `latest` release, so the two never clobber
-      # each other.
-      - name: Publish APK to the flutter-latest release
+      # One release, one APK: this is the product. Every main build replaces the
+      # release's whole asset list, so `latest` can never accumulate stale builds
+      # (the old Kotlin APK included).
+      - name: Publish the single latest APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APK: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          APK: mobile/build/app/outputs/flutter-apk/app-release.apk
+          REPO: ${{ github.repository }}
         run: |
-          if gh release view flutter-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload flutter-latest "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          set -euo pipefail
+          cp "$APK" smartiq-latest.apk
+          NOTES="The one installable SmartIQ APK - both portals, built from ${GITHUB_SHA:0:7} with Flutter $(flutter --version | head -1 | cut -d' ' -f2). Signed with the debug key: installs on any phone, not for store distribution."
+          if gh release view latest --repo "$REPO" >/dev/null 2>&1; then
+            # Upload first: a failed upload must never leave the release empty.
+            gh release upload latest smartiq-latest.apk --repo "$REPO" --clobber
+            # Then drop every other asset (the old Kotlin app-debug.apk included),
+            # so exactly one APK remains.
+            gh release view latest --repo "$REPO" --json assets --jq '.assets[].name' |
+              while IFS= read -r name; do
+                if [ -n "$name" ] && [ "$name" != "smartiq-latest.apk" ]; then
+                  gh release delete-asset latest "$name" --repo "$REPO" --yes
+                fi
+              done
+            gh release edit latest --repo "$REPO" --title "SmartIQ - latest APK" --notes "$NOTES"
           else
-            gh release create flutter-latest "$APK" \
-              --repo "$GITHUB_REPOSITORY" \
+            gh release create latest smartiq-latest.apk \
+              --repo "$REPO" \
               --target "$GITHUB_SHA" \
-              --title "SmartIQ - Flutter APK" \
-              --notes "Latest Dart/Flutter build of SmartIQ (both portals). Debug-signed: installable for testing, not for distribution."
+              --title "SmartIQ - latest APK" \
+              --notes "$NOTES"
           fi
+          echo "Released $(du -h smartiq-latest.apk | cut -f1) as the only asset of 'latest'."
