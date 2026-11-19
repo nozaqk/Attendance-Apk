@@ -16,7 +16,8 @@ on:
       - ".github/workflows/flutter-apk.yml"
 
 permissions:
-  contents: read
+  # write, so a main build can publish the APK to a release
+  contents: write
   pull-requests: write
 
 jobs:
@@ -119,3 +120,22 @@ jobs:
           name: smartiq-flutter-apk
           path: mobile/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
+
+      # A stable download link for testing on a phone. Debug-signed and named
+      # apart from the Kotlin build's `latest` release, so the two never clobber
+      # each other.
+      - name: Publish APK to the flutter-latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APK: mobile/build/app/outputs/flutter-apk/app-debug.apk
+        run: |
+          if gh release view flutter-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload flutter-latest "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create flutter-latest "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "SmartIQ - Flutter APK" \
+              --notes "Latest Dart/Flutter build of SmartIQ (both portals). Debug-signed: installable for testing, not for distribution."
+          fi
