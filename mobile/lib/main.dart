@@ -78,21 +78,21 @@ class _RootScreenState extends State<RootScreen> {
 
   @override
   Widget build(BuildContext context) {
-    switch (_role) {
-      case null:
-        return RolePicker(onSelect: (Role role) => setState(() => _role = role));
-      case Role.lecturer:
-        return LecturerGate(
-          store: TokenStore(widget.prefs, TokenStore.lecturerKey),
-          onChooseRole: () => setState(() => _role = null),
-        );
-      case Role.student:
-        return StudentGate(
-          store: TokenStore(widget.prefs, TokenStore.studentKey),
-          openFeed: _openFeed,
-          onChooseRole: () => setState(() => _role = null),
-        );
+    final role = _role;
+    if (role == null) {
+      return RolePicker(onSelect: (Role picked) => setState(() => _role = picked));
     }
+    if (role == Role.lecturer) {
+      return LecturerGate(
+        store: TokenStore(widget.prefs, TokenStore.lecturerKey),
+        onChooseRole: () => setState(() => _role = null),
+      );
+    }
+    return StudentGate(
+      store: TokenStore(widget.prefs, TokenStore.studentKey),
+      openFeed: _openFeed,
+      onChooseRole: () => setState(() => _role = null),
+    );
   }
 }
 

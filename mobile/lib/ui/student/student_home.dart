@@ -279,15 +279,15 @@ class _SessionRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           if (attendance != null)
-            Badge(
+            StatusPill(
               attendance.byLecturer && attendance.status == 'PRESENT'
                   ? 'MANUAL'
                   : attendance.status,
             )
           else if (session.status == 'ACTIVE')
-            const Badge('PENDING', tone: Tone.yellow)
+            const StatusPill('PENDING', tone: Tone.yellow)
           else
-            const Badge('NOT RECORDED', tone: Tone.grey),
+            const StatusPill('NOT RECORDED', tone: Tone.grey),
         ],
       ),
     );

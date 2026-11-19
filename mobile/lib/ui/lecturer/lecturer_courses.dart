@@ -61,7 +61,7 @@ class LecturerCoursesScreen extends StatelessWidget {
                               runSpacing: 6,
                               children: <Widget>[
                                 for (final Eligibility e in course.eligibility)
-                                  Badge(e.label, tone: Tone.blue),
+                                  StatusPill(e.label, tone: Tone.blue),
                               ],
                             ),
                         ],

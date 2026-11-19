@@ -80,7 +80,7 @@ class _SessionRow extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
-                Badge(label, tone: active ? Tone.green : Tone.grey),
+                StatusPill(label, tone: active ? Tone.green : Tone.grey),
               ],
             ),
             const SizedBox(height: 2),
@@ -94,10 +94,10 @@ class _SessionRow extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: <Widget>[
-                Badge('Present ${session.presentCount}', tone: Tone.green),
-                Badge('Absent ${session.absentCount}', tone: Tone.red),
+                StatusPill('Present ${session.presentCount}', tone: Tone.green),
+                StatusPill('Absent ${session.absentCount}', tone: Tone.red),
                 if (!session.locked && session.editableUntil != null)
-                  Badge('Edit until ${fmtStamp(session.editableUntil)}', tone: Tone.yellow),
+                  StatusPill('Edit until ${fmtStamp(session.editableUntil)}', tone: Tone.yellow),
               ],
             ),
           ],
@@ -166,7 +166,7 @@ class _LecturerResultScreenState extends State<LecturerResultScreen> {
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: Badge(
+                        child: StatusPill(
                           data.status,
                           tone: data.status == 'ACTIVE' ? Tone.green : Tone.grey,
                         ),

@@ -122,7 +122,7 @@ class _StudentRowView extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
               ),
-              Badge(streamLabel(student.stream), tone: Tone.blue),
+              StatusPill(streamLabel(student.stream), tone: Tone.blue),
             ],
           ),
           Text(

@@ -53,14 +53,14 @@ class RosterRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
-              Badge(item.status),
+              StatusPill(item.status),
               if (item.method == 'BLE') ...<Widget>[
                 const SizedBox(height: 4),
-                const Badge('Bluetooth verified', tone: Tone.green),
+                const StatusPill('Bluetooth verified', tone: Tone.green),
               ],
               if (item.method == 'LECTURER_MANUAL') ...<Widget>[
                 const SizedBox(height: 4),
-                const Badge('LECTURER_MANUAL', tone: Tone.yellow),
+                const StatusPill('LECTURER_MANUAL', tone: Tone.yellow),
               ],
             ],
           ),

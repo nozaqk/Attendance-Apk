@@ -244,7 +244,7 @@ class _MyCourseRow extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
-                const Badge('Added', tone: Tone.blue),
+                const StatusPill('Added', tone: Tone.blue),
                 LinkText('Remove', onPressed: onRemove),
               ],
             ),

@@ -135,7 +135,7 @@ class _LiveCardState extends State<_LiveCard> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
               ),
-              const Badge('LIVE', tone: Tone.green),
+              const StatusPill('LIVE', tone: Tone.green),
             ],
           ),
           const SizedBox(height: 4),
@@ -163,7 +163,7 @@ class _LiveCardState extends State<_LiveCard> {
             const SizedBox(height: 8),
             Row(
               children: <Widget>[
-                Badge(attendance.status),
+                StatusPill(attendance.status),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

@@ -59,8 +59,8 @@ Color toneBackground(Tone tone) {
   }
 }
 
-class Badge extends StatelessWidget {
-  const Badge(this.text, {super.key, this.tone});
+class StatusPill extends StatelessWidget {
+  const StatusPill(this.text, {super.key, this.tone});
 
   final String text;
   final Tone? tone;

@@ -288,7 +288,7 @@ class _RoomButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final Badge? badge;
+  final StatusPill? badge;
   final String? sub;
   final String? extra;
   final Color extraColor;
@@ -362,15 +362,15 @@ class _RoomTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final taken = room.taken;
     final noNode = !room.hasNode;
-    final Badge badge;
+    final StatusPill badge;
     if (taken) {
-      badge = const Badge('TAKEN', tone: Tone.red);
+      badge = const StatusPill('TAKEN', tone: Tone.red);
     } else if (noNode) {
-      badge = const Badge('NO NODE', tone: Tone.red);
+      badge = const StatusPill('NO NODE', tone: Tone.red);
     } else if (room.nodeOnline) {
-      badge = const Badge('NODE ONLINE', tone: Tone.green);
+      badge = const StatusPill('NODE ONLINE', tone: Tone.green);
     } else {
-      badge = const Badge('NODE OFFLINE', tone: Tone.yellow);
+      badge = const StatusPill('NODE OFFLINE', tone: Tone.yellow);
     }
     final String? extra;
     if (taken) {
@@ -584,7 +584,7 @@ class _ClassLiveState extends State<_ClassLive> {
       children: <Widget>[
         AppCard(
           title: '${widget.session.courseCode} · ${widget.session.courseName}',
-          actions: const Badge('IN PROGRESS', tone: Tone.green),
+          actions: const StatusPill('IN PROGRESS', tone: Tone.green),
           child: Poller<List<RosterItem>>(
             interval: const Duration(seconds: 5),
             fetch: () async {

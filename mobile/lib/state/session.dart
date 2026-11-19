@@ -35,12 +35,14 @@ Future<({String token, User user})> doLogin(
 /// Holds one portal's session: token, signed-in user and the API client bound to
 /// that token. Lecturer and student sessions are completely independent.
 class SessionController extends ChangeNotifier {
-  SessionController({required this.role, required this.store})
-      : api = ApiClient(tokenProvider: () => store.token);
+  SessionController({required this.role, required this.store});
+
+  /// Declared late so the token provider can read [store] (an instance field,
+  /// which an initializer list may not touch).
+  late final ApiClient api = ApiClient(tokenProvider: () => store.token);
 
   final String role;
   final TokenStore store;
-  final ApiClient api;
 
   User? user;
   bool loading = false;
