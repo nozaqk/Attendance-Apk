@@ -524,7 +524,7 @@ class Dashboard {
       to: str(json['to']),
       items: StudentSession.listFrom(json['items']),
       liveClass: live is Map ? StudentSession.fromJson(asMap(live)) : null,
-      stats: rawStats.map((key, value) => MapEntry('$key', asInt(value))),
+      stats: rawStats.map((key, value) => MapEntry(key.toString(), asInt(value))),
       unread: asInt(json['unreadNotifications']),
     );
   }

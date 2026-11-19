@@ -526,7 +526,7 @@ class _ClassLive extends StatefulWidget {
 
 class _ClassLiveState extends State<_ClassLive> {
   List<RosterItem> _items = <RosterItem>[];
-  bool _ended = false;
+  final bool _ended = false;
   bool _busy = false;
   String? _error;
 
