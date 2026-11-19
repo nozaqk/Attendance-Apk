@@ -139,12 +139,16 @@ jobs:
           cp "$APK" smartiq-latest.apk
           NOTES="The one installable SmartIQ APK - both portals, built from ${GITHUB_SHA:0:7} with Flutter $(flutter --version | head -1 | cut -d' ' -f2). Signed with the debug key: installs on any phone, not for store distribution."
           if gh release view latest --repo "$REPO" >/dev/null 2>&1; then
+            # Upload first: a failed upload must never leave the release empty.
+            gh release upload latest smartiq-latest.apk --repo "$REPO" --clobber
+            # Then drop every other asset (the old Kotlin app-debug.apk included),
+            # so exactly one APK remains.
             gh release view latest --repo "$REPO" --json assets --jq '.assets[].name' |
               while IFS= read -r name; do
-                [ -n "$name" ] || continue
-                gh release delete-asset latest "$name" --repo "$REPO" --yes
+                if [ -n "$name" ] && [ "$name" != "smartiq-latest.apk" ]; then
+                  gh release delete-asset latest "$name" --repo "$REPO" --yes
+                fi
               done
-            gh release upload latest smartiq-latest.apk --repo "$REPO" --clobber
             gh release edit latest --repo "$REPO" --title "SmartIQ - latest APK" --notes "$NOTES"
           else
             gh release create latest smartiq-latest.apk \
