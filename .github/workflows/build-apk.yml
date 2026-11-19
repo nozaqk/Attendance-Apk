@@ -10,8 +10,10 @@ on:
   pull_request:
 
 permissions:
-  contents: write
-  # Needed so a failed build can post its compiler output on the pull request.
+  # This build no longer publishes anything: the single `latest` release is
+  # produced by the Flutter workflow. Write is kept only so a failed build can
+  # post its compiler output on the pull request.
+  contents: read
   pull-requests: write
 
 jobs:
@@ -80,22 +82,6 @@ jobs:
           name: smart-attendance-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
-      - name: Publish latest APK release
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APK: android/app/build/outputs/apk/debug/app-debug.apk
-        run: |
-          if gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload latest "$APK" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create latest "$APK" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Latest APK" \
-              --notes "Latest Smart Attendance APK built from ${GITHUB_SHA}."
-          fi
 
   # Release-variant build, kept as a separate job so it can be tested on its own:
   # "Run workflow" → this job builds `assembleRelease` and uploads the APK as an artifact.

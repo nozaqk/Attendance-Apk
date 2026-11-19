@@ -1,9 +1,10 @@
 # Android APK (Lecturer + Student in one native app)
 
-> **Flutter rebuild.** The same product is also implemented in Dart/Flutter under
-> [`mobile/`](mobile/README.md): identical design and features, one APK with both
-> portals, built by the `Build Flutter APK` workflow. This document still describes
-> the Kotlin/Compose build in `android/`.
+> **The product is now the Dart/Flutter build** in [`mobile/`](mobile/README.md):
+> identical design and features, one APK with both portals. The `Build Flutter APK`
+> workflow publishes it as the single asset of the **`latest`** release
+> (`smartiq-latest.apk`). This document describes the earlier Kotlin/Compose build
+> in `android/`, which still compiles in CI but no longer publishes an APK.
 
 
 This repo contains two web apps and **one native Android app**:
